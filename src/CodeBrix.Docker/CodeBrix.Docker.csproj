@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>CodeBrix.Docker</RootNamespace>
+    <AssemblyName>CodeBrix.Docker</AssemblyName>
+    <PackageId>CodeBrix.Docker.MitLicenseForever</PackageId>
+    <Version>1.0.244.0</Version>
+    <Authors>Jeremy Ellis</Authors>
+    <Company>Ellisnet</Company>
+    <Copyright>Copyright (c) 2026 Jeremy Ellis</Copyright>
+    <Description>A cross-platform, zero-dependency .NET library for managing, diagnosing, and optimizing Docker containers and images. Container lifecycle and typed resource limits over the Docker Engine API (named pipe / Unix socket), CPU-throttling and OOM diagnostics, an optimization advisor encoding container best practices, and image analysis via containerized Trivy, Dive, and Hadolint.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/ellisnet/CodeBrix.Docker</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/ellisnet/CodeBrix.Docker</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>docker;containers;container-optimization;resource-limits;cgroups;diagnostics;oom;throttling;trivy;dive;hadolint;CodeBrix</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\THIRD-PARTY-NOTICES.txt" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
