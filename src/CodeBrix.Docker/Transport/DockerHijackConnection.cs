@@ -82,7 +82,8 @@ internal static class DockerHijackConnection
     private static async Task<HijackedStream> HandshakeAsync(DockerEndpoint endpoint, DockerClientOptions options,
         string path, string jsonBody, CancellationToken cancellationToken)
     {
-        var stream = await DockerConnectionFactory.ConnectAsync(endpoint, options, cancellationToken)
+        var stream = await DockerConnectionFactory
+            .ConnectAsync(endpoint, options, writeClosable: true, cancellationToken)
             .ConfigureAwait(false);
 
         try

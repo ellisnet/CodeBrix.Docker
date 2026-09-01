@@ -1017,10 +1017,13 @@ THE ORDER OF OPERATIONS THAT WORKS
      connection carries bytes and nothing else; the exit code is not on it.
 
 CloseStandardInputAsync shuts down the writing half of the connection, which is
-how a command like `cat` sees end of file. Unix sockets, TCP and ssh:// support
-it; a Windows named pipe has no equivalent, so CanCloseStandardInput is false
-there and the call throws NotSupportedException -- dispose the session instead.
-Check the property first.
+how a command like `cat` sees end of file. Every transport a stock daemon
+answers on supports it: Unix sockets and TCP shut the writing half down with
+SHUT_WR, ssh:// closes the SSH child's standard input, and a Windows named pipe
+sends the zero-length message the daemon reads as end of file. Still check
+CanCloseStandardInput first -- it is a per-connection capability, and a pipe
+that is not in message mode cannot carry the signal, so the call throws
+NotSupportedException there and the session must be disposed instead.
 
 
 IMAGES: ImageOperations
@@ -2771,9 +2774,11 @@ COMMON PITFALLS TO AVOID
    library shortcut. Set Tty = false when the two must stay apart.
 
 7. DO NOT call CloseStandardInputAsync without checking
-   ContainerExecStream.CanCloseStandardInput. Unix sockets, TCP and ssh://
-   support the half-close; a Windows named pipe has no equivalent and the call
-   throws NotSupportedException there. Dispose the session instead.
+   ContainerExecStream.CanCloseStandardInput. Unix sockets, TCP, ssh:// and a
+   Windows named pipe all support the half-close against a stock daemon, but it
+   remains a per-connection capability -- a pipe that is not in message mode
+   cannot carry the signal and the call throws NotSupportedException there.
+   Dispose the session instead.
 
 8. DO NOT read PidsStats.Limit to decide whether a container is CAPPED. What it
    reports depends on the daemon's cgroup driver. Under the SYSTEMD driver an
@@ -3155,7 +3160,8 @@ ERRORS      DockerException
               DockerApiException (StatusCode, ResponseBody)
                 DockerContainerNotFoundException / DockerImageNotFoundException
               DockerCliException (ExitCode, StdErr, Command)
-            NotSupportedException  -> unknown/https endpoint, half-close on a pipe
+            NotSupportedException  -> unknown/https endpoint, half-close on a
+                                      byte-mode pipe
             ArgumentException      -> incomplete spec, thrown before any request
 
 CLI NEEDED  Images.BuildAsync, an authenticated Images.PullAsync,

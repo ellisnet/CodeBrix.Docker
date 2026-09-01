@@ -51,7 +51,7 @@ internal static class DockerConnectionFactory
         ArgumentNullException.ThrowIfNull(endpoint);
         ArgumentNullException.ThrowIfNull(options);
 
-        return (_, ct) => ConnectAsync(endpoint, options, ct);
+        return (_, ct) => ConnectAsync(endpoint, options, writeClosable: false, ct);
     }
 
     /// <summary>
@@ -61,19 +61,24 @@ internal static class DockerConnectionFactory
     /// </summary>
     /// <param name="endpoint">The parsed daemon endpoint.</param>
     /// <param name="options">The client options, which configure the <c>ssh://</c> transport.</param>
+    /// <param name="writeClosable">
+    /// <see langword="true"/> when the caller needs to close standard input on its own, as a hijacked
+    /// stream does. It only makes a difference to a named pipe, whose half-close costs an extra
+    /// wrapper the pooled HTTP connections have no use for.
+    /// </param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>A connected stream. The caller owns its lifetime.</returns>
     /// <exception cref="DockerException">The daemon could not be reached.</exception>
     /// <exception cref="NotSupportedException">The endpoint kind is not supported.</exception>
     public static ValueTask<Stream> ConnectAsync(DockerEndpoint endpoint, DockerClientOptions options,
-        CancellationToken cancellationToken)
+        bool writeClosable, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
         ArgumentNullException.ThrowIfNull(options);
 
         return endpoint.Kind switch
         {
-            DockerEndpointKind.NamedPipe => ConnectNamedPipeAsync(endpoint, cancellationToken),
+            DockerEndpointKind.NamedPipe => ConnectNamedPipeAsync(endpoint, writeClosable, cancellationToken),
             DockerEndpointKind.UnixSocket => ConnectUnixSocketAsync(endpoint, cancellationToken),
             DockerEndpointKind.Tcp => ConnectTcpAsync(endpoint, cancellationToken),
             DockerEndpointKind.Ssh => SshDialStdioConnection.ConnectAsync(endpoint, options, cancellationToken),
@@ -81,7 +86,8 @@ internal static class DockerConnectionFactory
         };
     }
 
-    private static async ValueTask<Stream> ConnectNamedPipeAsync(DockerEndpoint endpoint, CancellationToken ct)
+    private static async ValueTask<Stream> ConnectNamedPipeAsync(DockerEndpoint endpoint, bool writeClosable,
+        CancellationToken ct)
     {
         var pipe = new NamedPipeClientStream(
             endpoint.PipeServer,
@@ -92,7 +98,7 @@ internal static class DockerConnectionFactory
         try
         {
             await pipe.ConnectAsync(ct).ConfigureAwait(false);
-            return pipe;
+            return writeClosable ? new NamedPipeDockerStream(pipe) : pipe;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

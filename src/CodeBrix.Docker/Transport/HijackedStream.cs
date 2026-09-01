@@ -15,8 +15,9 @@ namespace CodeBrix.Docker;
 /// <remarks>
 /// The stream replays any bytes that arrived in the same read as the response headers before it
 /// touches the socket again, so no output is lost. On a Unix domain socket or a TCP connection the
-/// writing half can be shut down on its own (<see cref="CanCloseWrite"/>); a Windows named pipe has
-/// no equivalent, and there the whole stream must be disposed to signal end of input.
+/// writing half can be shut down on its own (<see cref="CanCloseWrite"/>); a Windows named pipe and
+/// an <c>ssh://</c> tunnel reach the same end through their own
+/// <see cref="IWriteClosableStream"/> implementations.
 /// </remarks>
 internal sealed class HijackedStream : Stream, IWriteClosableStream
 {
@@ -52,7 +53,8 @@ internal sealed class HijackedStream : Stream, IWriteClosableStream
         _prefixEnd = prefixEnd;
         _socket = inner is NetworkStream network ? network.Socket : null;
 
-        // The ssh:// transport is not a socket, but it closes the far end's standard input for us.
+        // Neither the ssh:// transport nor a named pipe is a socket, but both close the far end's
+        // standard input for us.
         _writeClosableInner = inner as IWriteClosableStream;
     }
 

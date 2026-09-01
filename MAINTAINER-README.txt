@@ -552,8 +552,43 @@ the remote command, and dial-stdio shuts down the writing half of the remote
 socket -- the same half-close a local Unix socket gets from SHUT_WR.
 HijackedStream delegates its half-close to an inner IWriteClosableStream when it
 is not sitting on a NetworkStream, which is the one line that made this work.
-ContainerExecStream.CanCloseStandardInput is therefore true over ssh:// and
-false only on a Windows named pipe.
+
+HOW THE npipe:// HALF-CLOSE IS WIRED
+------------------------------------
+A Windows named pipe has no shutdown(SHUT_WR), and the library used to say so:
+CanCloseStandardInput was false there and interactive exec could only signal end
+of input by dropping the whole connection. That was wrong. The daemon creates
+its pipe in MESSAGE mode precisely so a ZERO-LENGTH MESSAGE can stand in for end
+of file -- that is what go-winio, the pipe library on the daemon's side, calls
+CloseWrite(), and it is how `docker exec -i` works on Windows.
+
+Transport/NamedPipeDockerStream.cs wraps the NamedPipeClientStream and
+implements IWriteClosableStream on that convention. Two things are easy to get
+wrong and worth not reintroducing:
+
+  1. THE EMPTY WRITE HAS TO BE NATIVE. PipeStream returns early for an empty
+     buffer, so WriteAsync(ReadOnlyMemory<byte>.Empty) sends NOTHING -- the peer
+     never sees a message and the command never sees end of file. The signal
+     goes straight to WriteFile with a count of zero.
+
+  2. THE OVERLAPPED EVENT HANDLE NEEDS ITS LOW BIT SET. The handle is opened
+     PipeOptions.Asynchronous and bound to a thread pool I/O completion port;
+     the low bit is what tells Windows to signal the event instead of queueing a
+     completion packet nobody is waiting on.
+
+Message mode is detected with GetNamedPipeInfo rather than
+PipeStream.TransmissionMode, which reports the mode THIS PROCESS asked for, not
+the one the server created the pipe with (it says Byte for docker_engine).
+A pipe that really is byte-mode still reports CanCloseWrite false and still
+throws, so the old contract holds where it genuinely applies.
+
+The wrapper is opt-in: DockerConnectionFactory.ConnectAsync takes a
+writeClosable flag and only DockerHijackConnection passes true, so the pooled
+HttpClient connections are unchanged. Nothing in the Unix-socket or TCP path was
+touched -- those still half-close through NetworkStream and Socket.Shutdown.
+
+ContainerExecStream.CanCloseStandardInput is therefore true on every transport a
+stock daemon answers on.
 
 TWO TRANSPORT DEFECTS FIXED, WORTH NOT REINTRODUCING
 ----------------------------------------------------
