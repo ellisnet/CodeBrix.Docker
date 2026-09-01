@@ -67,8 +67,14 @@ public sealed class StatsTests(DockerTestFixture fixture)
         }
     }
 
+    /// <summary>
+    /// A container the suite did not cap must not come back carrying a small per-container PID cap.
+    /// Anything at or below this is a configured limit rather than an inherited host-wide ceiling.
+    /// </summary>
+    private const long SmallestPlausibleHostWidePidCeiling = 1024;
+
     [Fact]
-    public async Task GetStatsAsync_ReportsAPidLimitOnlyWhenOneIsConfigured()
+    public async Task GetStatsAsync_ReportsTheConfiguredPidLimitAndTheHostCeilingWithoutOne()
     {
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(3));
         var unlimited = fixture.Spec("pidsfree", "busybox:latest", "sleep", "300");
@@ -85,13 +91,35 @@ public sealed class StatsTests(DockerTestFixture fixture)
             var unlimitedStats = await Client.Containers.GetStatsAsync(unlimitedId, cancellation.Token);
             var limitedStats = await Client.Containers.GetStatsAsync(limitedId, cancellation.Token);
 
-            // cgroup v2 reports "max" for an unlimited container, which the daemon sends as an
-            // unsigned 64-bit sentinel; the library surfaces that as null rather than overflowing.
-            Assert.NotNull(unlimitedStats.PidsStats);
-            Assert.Null(unlimitedStats.PidsStats.Limit);
-            Assert.True(unlimitedStats.PidsStats.Current >= 1);
-
+            // An explicitly configured cap comes back verbatim. This is the load-bearing assertion:
+            // whatever the host's defaults are, what the caller asked for is what the daemon reports.
             Assert.Equal(64, limitedStats.PidsStats?.Limit);
+
+            // Without a cap, what the daemon reports depends on the daemon's cgroup driver, so the
+            // assertion has to admit both shapes:
+            //
+            //   * cgroupfs driver (and systemd with DefaultTasksMax=infinity) leaves cgroup v2's
+            //     pids.max at the literal "max". The daemon sends that as an unsigned 64-bit sentinel
+            //     that does not fit in a long, and the library surfaces it as null rather than
+            //     overflowing - which is what PidsStats.UnlimitedAsNullInt64Converter exists for.
+            //   * The systemd driver runs each container as a systemd scope, which inherits
+            //     TasksMax=DefaultTasksMax (15% of kernel.threads-max on a stock systemd). pids.max is
+            //     then a concrete, large number - 76464 on this machine - even though nothing was
+            //     configured for the container.
+            //
+            // Either way the container was not given a per-container cap, which is what the test is
+            // really about, so assert that rather than a number this host happens to produce.
+            var unconfigured = await Client.Containers.InspectAsync(unlimitedId, cancellation.Token);
+            Assert.True(unconfigured.HostConfig?.PidsLimit is null or 0,
+                "The container was created without a PID limit, so HostConfig should not carry one.");
+
+            Assert.NotNull(unlimitedStats.PidsStats);
+            Assert.True(unlimitedStats.PidsStats.Current >= 1);
+            Assert.True(
+                unlimitedStats.PidsStats.Limit is null
+                || unlimitedStats.PidsStats.Limit > SmallestPlausibleHostWidePidCeiling,
+                "An uncapped container should report either no PID limit at all or the host-wide "
+                + $"ceiling, never a small per-container cap. Reported: {unlimitedStats.PidsStats.Limit}.");
         }
         finally
         {

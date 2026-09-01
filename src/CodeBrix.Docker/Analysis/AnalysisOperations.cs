@@ -71,8 +71,26 @@ public sealed class AnalysisOperations
     /// <summary>Gets or sets the Hadolint image to run. Defaults to <c>hadolint/hadolint:latest</c>.</summary>
     public string HadolintImage { get; set; } = "hadolint/hadolint:latest";
 
-    /// <summary>Gets or sets the Slim image to run. Defaults to <c>dslim/slim:latest</c>.</summary>
-    public string SlimImage { get; set; } = "dslim/slim:latest";
+    /// <summary>
+    /// Gets or sets the Slim image to run. Defaults to <c>mintoolkit/mint:latest</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The upstream project renamed itself from <c>slim</c> to <c>mint</c>, and the old
+    /// <c>dslim/slim</c> repository stopped receiving builds at 1.40.11 (February 2024). That build
+    /// negotiates Docker Engine API version 1.24, which modern daemons refuse outright — against Docker
+    /// 29 it fails immediately with <c>client version 1.24 is too old. Minimum supported API version is
+    /// 1.40</c>, before it inspects anything. Setting <c>DOCKER_API_VERSION</c> does not help, because
+    /// the version is baked into that build's client.
+    /// </para>
+    /// <para>
+    /// <c>mintoolkit/mint</c> is the maintained continuation and accepts the identical command line, so
+    /// it is the default here. Assign <c>dslim/slim:latest</c> — or use
+    /// <see cref="SlimOptions.ToolImage"/> for a single run — to go back to the retired image against an
+    /// older daemon.
+    /// </para>
+    /// </remarks>
+    public string SlimImage { get; set; } = "mintoolkit/mint:latest";
 
     // ---------------------------------------------------------------------------------------
     // Trivy

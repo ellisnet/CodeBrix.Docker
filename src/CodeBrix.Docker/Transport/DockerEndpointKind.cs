@@ -13,4 +13,10 @@ internal enum DockerEndpointKind
 
     /// <summary>A plain TCP connection (<c>tcp://</c> or <c>http://</c>).</summary>
     Tcp,
+
+    /// <summary>
+    /// A remote daemon reached through the system SSH client (<c>ssh://</c>), which runs
+    /// <c>docker system dial-stdio</c> on the far end.
+    /// </summary>
+    Ssh,
 }

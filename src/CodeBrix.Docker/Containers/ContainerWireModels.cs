@@ -214,6 +214,9 @@ internal sealed class ExecCreateRequest
 
     [JsonPropertyName("WorkingDir")]
     public string WorkingDir { get; init; }
+
+    [JsonPropertyName("Privileged")]
+    public bool Privileged { get; init; }
 }
 
 /// <summary>Response body of <c>POST /containers/{id}/exec</c>.</summary>
@@ -231,19 +234,10 @@ internal sealed class ExecStartRequest
 
     [JsonPropertyName("Tty")]
     public bool Tty { get; init; }
-}
 
-/// <summary>Response body of <c>GET /exec/{id}/json</c>.</summary>
-internal sealed class ExecInspectResponse
-{
-    [JsonPropertyName("ID")]
-    public string Id { get; init; }
-
-    [JsonPropertyName("Running")]
-    public bool Running { get; init; }
-
-    [JsonPropertyName("ExitCode")]
-    public long? ExitCode { get; init; }
+    /// <summary>The initial terminal size as <c>[height, width]</c>, omitted when not requested.</summary>
+    [JsonPropertyName("ConsoleSize")]
+    public IReadOnlyList<int> ConsoleSize { get; init; }
 }
 
 /// <summary>Response body of <c>POST /containers/prune</c>.</summary>

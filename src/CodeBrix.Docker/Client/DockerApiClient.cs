@@ -31,7 +31,7 @@ internal sealed class DockerApiClient : IDisposable
     {
         Options = options ?? throw new ArgumentNullException(nameof(options));
         Endpoint = DockerEndpoint.Parse(DockerEndpoint.Resolve(options.Endpoint));
-        _handler = DockerConnectionFactory.CreateHandler(Endpoint);
+        _handler = DockerConnectionFactory.CreateHandler(Endpoint, Options);
         _http = new HttpClient(_handler, disposeHandler: false)
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -128,6 +128,27 @@ internal sealed class DockerApiClient : IDisposable
     /// </summary>
     public Task<Stream> PostForStreamAsync(string path, object body, CancellationToken cancellationToken) =>
         SendForStreamAsync(HttpMethod.Post, path, body, cancellationToken);
+
+    /// <summary>
+    /// Issues a POST that asks the daemon to hand the connection over, and returns the raw
+    /// bidirectional stream it upgraded to. Used by interactive exec and attach.
+    /// </summary>
+    /// <param name="path">The unversioned Engine API path, for example <c>exec/{id}/start</c>.</param>
+    /// <param name="body">The request body, serialized as JSON, or <see langword="null"/> for none.</param>
+    /// <param name="cancellationToken">The caller's cancellation token.</param>
+    /// <returns>The upgraded connection. The caller owns it.</returns>
+    /// <remarks>
+    /// <see cref="DockerClientOptions.DefaultTimeout"/> bounds the handshake only; once the daemon has
+    /// upgraded, the stream lives as long as the caller keeps it.
+    /// </remarks>
+    public Task<HijackedStream> PostForHijackedStreamAsync(string path, object body,
+        CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        return DockerHijackConnection.PostAsync(Endpoint, Options, path,
+            body is null ? null : DockerJson.Serialize(body), cancellationToken);
+    }
 
     private async Task<Stream> SendForStreamAsync(HttpMethod method, string path, object body,
         CancellationToken cancellationToken)
@@ -239,8 +260,13 @@ internal sealed class DockerApiClient : IDisposable
         }
         catch (HttpRequestException ex)
         {
+            // A transport that could not be dialled raises a DockerException carrying advice of its own —
+            // an untrusted SSH host key, a daemon that is not running — and HttpClient buries it as an
+            // inner exception. Say what it said, rather than "an error occurred while sending the request".
+            var detail = FindTransportFailure(ex)?.Message ?? ex.Message;
+
             throw new DockerException(
-                $"The Docker API request '{method} {path}' failed: {ex.Message} " +
+                $"The Docker API request '{method} {path}' failed: {detail} " +
                 $"(endpoint '{Endpoint.Original}').", ex);
         }
 
@@ -263,6 +289,25 @@ internal sealed class DockerApiClient : IDisposable
 
             throw CreateApiException(response.StatusCode, body, path);
         }
+    }
+
+    /// <summary>
+    /// Finds the transport's own failure inside an <see cref="HttpRequestException"/> chain, so that the
+    /// message it wrote for the user is not lost behind HttpClient's generic wrapper.
+    /// </summary>
+    /// <param name="exception">The exception HttpClient threw.</param>
+    /// <returns>The outermost <see cref="DockerException"/> in the chain, or <see langword="null"/>.</returns>
+    private static DockerException FindTransportFailure(Exception exception)
+    {
+        for (var candidate = exception.InnerException; candidate is not null; candidate = candidate.InnerException)
+        {
+            if (candidate is DockerException failure)
+            {
+                return failure;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

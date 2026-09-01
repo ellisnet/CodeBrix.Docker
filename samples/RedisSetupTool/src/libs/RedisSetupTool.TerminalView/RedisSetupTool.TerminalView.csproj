@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The exec session contract the terminal pump drives -->
+    <ProjectReference Include="..\RedisSetupTool.DockerManagement\RedisSetupTool.DockerManagement.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- TerminalControl - the only control this library touches, through one adapter class -->
+    <PackageReference Include="CodeBrix.Platform.TerminalView.ApacheLicenseForever" Version="1.0.243.226" />
+  </ItemGroup>
+</Project>

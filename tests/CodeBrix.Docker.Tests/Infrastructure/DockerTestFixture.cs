@@ -36,7 +36,9 @@ public sealed class DockerTestFixture : IAsyncLifetime
         "nginx:alpine",
     ];
 
+    private readonly SemaphoreSlim _sshdGate = new(1, 1);
     private DockerClient _client;
+    private SshdTestHarness _sshd;
 
     /// <summary>Gets the shared client.</summary>
     public DockerClient Client =>
@@ -79,6 +81,27 @@ public sealed class DockerTestFixture : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    /// Gets the containerised SSH server used by the <c>ssh://</c> transport tests, building its images
+    /// and starting its containers on first use.
+    /// </summary>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The shared harness.</returns>
+    public async Task<SshdTestHarness> GetSshdHarnessAsync(CancellationToken cancellationToken)
+    {
+        await _sshdGate.WaitAsync(cancellationToken);
+
+        try
+        {
+            _sshd ??= await SshdTestHarness.StartAsync(this, cancellationToken);
+            return _sshd;
+        }
+        finally
+        {
+            _sshdGate.Release();
+        }
+    }
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
@@ -86,6 +109,12 @@ public sealed class DockerTestFixture : IAsyncLifetime
         {
             return;
         }
+
+        // Only the scratch key and known_hosts files: the containers and images it created are labelled,
+        // and the sweep below removes them with everything else.
+        _sshd?.Dispose();
+        _sshd = null;
+        _sshdGate.Dispose();
 
         try
         {

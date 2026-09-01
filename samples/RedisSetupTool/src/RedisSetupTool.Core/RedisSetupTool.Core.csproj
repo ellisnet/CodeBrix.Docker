@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+
+    <!-- Match the namespace used by the app code -->
+    <RootNamespace>RedisSetupTool</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.11" />
+    <PackageReference Include="CodeBrix.Platform.ApacheLicenseForever" Version="1.0.243.226" />
+    <PackageReference Include="CodeBrix.Platform.Fonts.Roboto.OflLicenseForever" Version="1.0.240.51" />
+    <!-- Roboto Mono - endpoints, ids, log text and the terminal grid -->
+    <PackageReference Include="CodeBrix.Platform.Fonts.RobotoMono.OflLicenseForever" Version="1.0.238.534" />
+    <!-- TerminalControl - the console tabs host it; the views need the type by name -->
+    <PackageReference Include="CodeBrix.Platform.TerminalView.ApacheLicenseForever" Version="1.0.243.226" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\libs\RedisSetupTool.DockerManagement\RedisSetupTool.DockerManagement.csproj" />
+    <ProjectReference Include="..\libs\RedisSetupTool.RedisManagement\RedisSetupTool.RedisManagement.csproj" />
+    <ProjectReference Include="..\libs\RedisSetupTool.TerminalView\RedisSetupTool.TerminalView.csproj" />
+  </ItemGroup>
+</Project>

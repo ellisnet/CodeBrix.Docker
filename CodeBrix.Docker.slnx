@@ -1,5 +1,37 @@
 <Solution>
-  <Folder Name="/tests/">
+  <Folder Name="/Samples/">
+    <Project Path="samples/RedisSetupTool/src/RedisSetupTool.UI/RedisSetupTool.UI.shproj" />
+    <Project Path="samples/RedisSetupTool/src/RedisSetupTool.Core/RedisSetupTool.Core.csproj" />
+    <Project Path="samples/RedisSetupTool/src/RedisSetupTool.LinuxX11/RedisSetupTool.LinuxX11.csproj" />
+    <Project Path="samples/RedisSetupTool/src/RedisSetupTool.LinuxWayland/RedisSetupTool.LinuxWayland.csproj" />
+    <Project Path="samples/RedisSetupTool/src/RedisSetupTool.LinuxFrameBuffer/RedisSetupTool.LinuxFrameBuffer.csproj" />
+    <Project Path="samples/RedisSetupTool/src/RedisSetupTool.MacOS/RedisSetupTool.MacOS.csproj" />
+    <Project Path="samples/RedisSetupTool/src/RedisSetupTool.Win32Skia/RedisSetupTool.Win32Skia.csproj" />
+    <Project Path="samples/RedisSetupTool/src/RedisSetupTool.WinWpfSkia/RedisSetupTool.WinWpfSkia.csproj" />
+  </Folder>
+  <Folder Name="/Samples/Libraries/">
+    <Project Path="samples/RedisSetupTool/src/libs/RedisSetupTool.DockerManagement/RedisSetupTool.DockerManagement.csproj" />
+    <Project Path="samples/RedisSetupTool/src/libs/RedisSetupTool.RedisManagement/RedisSetupTool.RedisManagement.csproj" />
+    <Project Path="samples/RedisSetupTool/src/libs/RedisSetupTool.TerminalView/RedisSetupTool.TerminalView.csproj" />
+  </Folder>
+  <Folder Name="/Samples/Tests/">
+    <Project Path="samples/RedisSetupTool/tests/libs/RedisSetupTool.DockerManagement.Tests/RedisSetupTool.DockerManagement.Tests.csproj" />
+    <Project Path="samples/RedisSetupTool/tests/libs/RedisSetupTool.RedisManagement.Tests/RedisSetupTool.RedisManagement.Tests.csproj" />
+    <Project Path="samples/RedisSetupTool/tests/libs/RedisSetupTool.TerminalView.Tests/RedisSetupTool.TerminalView.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path=".gitignore" />
+    <File Path="AGENT-README.txt" />
+    <File Path="EXTRAS-README.txt" />
+    <File Path="global.json" />
+    <File Path="icon-codebrix-128.png" />
+    <File Path="LICENSE" />
+    <File Path="MAINTAINER-README.txt" />
+    <File Path="README-INDEX.txt" />
+    <File Path="README.md" />
+    <File Path="THIRD-PARTY-NOTICES.txt" />
+  </Folder>
+  <Folder Name="/Tests/">
     <Project Path="tests/CodeBrix.Docker.Tests/CodeBrix.Docker.Tests.csproj" />
   </Folder>
   <Project Path="src/CodeBrix.Docker/CodeBrix.Docker.csproj" />

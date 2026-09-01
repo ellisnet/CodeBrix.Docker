@@ -1,0 +1,36 @@
+<Application x:Class="RedisSetupTool.App"
+     xmlns="clr-namespace:Microsoft.UI.Xaml;assembly=CodeBrix.Platform.UI"
+     xmlns:m="clr-namespace:Microsoft.UI.Xaml.Media;assembly=CodeBrix.Platform.UI"
+     xmlns:c="clr-namespace:Microsoft.UI.Xaml.Controls;assembly=CodeBrix.Platform.UI.FluentTheme"
+     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+     RequestedTheme="Dark">
+
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <!-- Load WinUI resources -->
+        <c:XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+      </ResourceDictionary.MergedDictionaries>
+      <!-- Roboto font - reference the .ttf file directly (the Fonts.xaml
+           merge does not work on Skia targets) -->
+      <m:FontFamily x:Key="RobotoFont">ms-appx:///CodeBrix.Platform.Fonts.Roboto/Fonts/Roboto.ttf</m:FontFamily>
+      <!-- Roboto Mono - endpoints, ids and log text; the terminal control uses it by default -->
+      <m:FontFamily x:Key="RobotoMonoFont">ms-appx:///CodeBrix.Platform.Fonts.RobotoMono/Fonts/RobotoMono.ttf</m:FontFamily>
+
+      <!-- Dialogs open in the popup layer, which follows the app default theme (the
+           RequestedTheme="Dark" above) rather than RootGrid's - these ContentDialog
+           keys then refine them to the app palette. On the FrameBuffer heads the
+           built-in picker/software-keyboard chrome resolves the same keys, so it
+           restyles identically -->
+      <m:SolidColorBrush x:Key="ContentDialogBackground" Color="#1F232B" />
+      <m:SolidColorBrush x:Key="ContentDialogForeground" Color="#F2F4F8" />
+      <m:SolidColorBrush x:Key="ContentDialogBorderBrush" Color="#2A2F39" />
+      <m:SolidColorBrush x:Key="ContentDialogLightDismissOverlayBackground" Color="#99000000" />
+      <!-- Resolved by the FrameBuffer/Emulated picker + software-keyboard chrome -->
+      <m:SolidColorBrush x:Key="ContentDialogTopOverlay" Color="#1F232B" />
+      <m:SolidColorBrush x:Key="ContentDialogSeparatorBorderBrush" Color="#2A2F39" />
+      <m:SolidColorBrush x:Key="ContentDialogSmokeFill" Color="#4D000000" />
+    </ResourceDictionary>
+  </Application.Resources>
+
+</Application>

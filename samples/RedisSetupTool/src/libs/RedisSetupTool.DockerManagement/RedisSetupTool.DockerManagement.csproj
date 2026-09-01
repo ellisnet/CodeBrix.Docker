@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The DI registration extension method lives in this library, so it needs the abstractions -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />
+  </ItemGroup>
+
+  <!-- CodeBrix.Docker - the whole reason this library exists. PrivateAssets=all keeps the
+       reference from flowing to RedisSetupTool.Core and the heads, so the D17 boundary is
+       enforced by the compiler rather than by discipline: a downstream project that names a
+       CodeBrix.Docker type fails with CS0234. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\src\CodeBrix.Docker\CodeBrix.Docker.csproj">
+      <PrivateAssets>all</PrivateAssets>
+    </ProjectReference>
+  </ItemGroup>
+
+  <!-- PrivateAssets=all also stops the RUNTIME asset flowing, which would leave every consumer
+       with a missing CodeBrix.Docker.dll at load time. Re-publish just the assembly as a
+       copy-to-output item so consumers get the file without getting the compile-time reference.
+       Add it to ReferenceCopyLocalPaths as well so it is listed in the consumer's deps.json. -->
+  <Target Name="FlowDockerAssemblyToConsumers"
+          BeforeTargets="GetCopyToOutputDirectoryItems"
+          DependsOnTargets="ResolveReferences">
+    <ItemGroup>
+      <AllItemsFullPathWithTargetPath
+          Include="@(ReferencePath->WithMetadataValue('Filename', 'CodeBrix.Docker'))">
+        <TargetPath>CodeBrix.Docker.dll</TargetPath>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </AllItemsFullPathWithTargetPath>
+    </ItemGroup>
+  </Target>
+</Project>

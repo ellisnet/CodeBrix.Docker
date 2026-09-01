@@ -1,0 +1,2276 @@
+<Page
+    x:Class="RedisSetupTool.Views.MainPage"
+    xmlns="clr-namespace:Microsoft.UI.Xaml.Controls;assembly=CodeBrix.Platform.UI"
+    xmlns:c="clr-namespace:Microsoft.UI.Xaml.Controls;assembly=CodeBrix.Platform.UI"
+    xmlns:d="clr-namespace:Microsoft.UI.Xaml.Data;assembly=CodeBrix.Platform.UI"
+    xmlns:m="clr-namespace:Microsoft.UI.Xaml.Media;assembly=CodeBrix.Platform.UI"
+    xmlns:ui="clr-namespace:Microsoft.UI.Xaml;assembly=CodeBrix.Platform.UI"
+    xmlns:conv="clr-namespace:CodeBrix.Platform.UI.Converters;assembly=CodeBrix.Platform.UI.Toolkit"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:RedisSetupTool.Views"
+    xmlns:vm="clr-namespace:RedisSetupTool.ViewModels;assembly=RedisSetupTool.Core"
+    FontFamily="{StaticResource RobotoFont}"
+    Background="#16181D">
+
+    <Page.DataContext>
+        <vm:MainViewModel />
+    </Page.DataContext>
+
+    <Page.Resources>
+        <!-- ═══ The app's dark palette (accent: Redis red) ═══ -->
+        <m:SolidColorBrush x:Key="WindowBrush" Color="#16181D" />
+        <m:SolidColorBrush x:Key="HeaderBrush" Color="#1B1E25" />
+        <m:SolidColorBrush x:Key="CardBrush" Color="#1F232B" />
+        <m:SolidColorBrush x:Key="CardWellBrush" Color="#171A20" />
+        <m:SolidColorBrush x:Key="HairlineBrush" Color="#2A2F39" />
+        <m:SolidColorBrush x:Key="TextPrimaryBrush" Color="#F2F4F8" />
+        <m:SolidColorBrush x:Key="TextSecondaryBrush" Color="#A8B0BF" />
+        <m:SolidColorBrush x:Key="TextTertiaryBrush" Color="#6E7686" />
+        <m:SolidColorBrush x:Key="AccentBrush" Color="#E05252" />
+        <m:SolidColorBrush x:Key="AccentDimBrush" Color="#B33F3F" />
+        <m:SolidColorBrush x:Key="GoodBrush" Color="#4FBF7B" />
+        <m:SolidColorBrush x:Key="RaisedBrush" Color="#262B34" />
+
+        <!-- Re-key the theme's standard-button brushes to the dark palette, so every plain
+             Button on this page hovers and presses in-palette -->
+        <m:SolidColorBrush x:Key="ButtonBackground" Color="#262B34" />
+        <m:SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#2E3440" />
+        <m:SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#232830" />
+        <m:SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="#1F232B" />
+        <m:SolidColorBrush x:Key="ButtonForeground" Color="#F2F4F8" />
+        <m:SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#FFFFFF" />
+        <m:SolidColorBrush x:Key="ButtonForegroundPressed" Color="#F2F4F8" />
+        <m:SolidColorBrush x:Key="ButtonForegroundDisabled" Color="#6E7686" />
+        <m:SolidColorBrush x:Key="ButtonBorderBrush" Color="#2A2F39" />
+        <m:SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#3A4150" />
+        <m:SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#2A2F39" />
+        <m:SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="#2A2F39" />
+
+        <!-- Re-key the theme's accent-button brushes to the app's red accent -->
+        <m:SolidColorBrush x:Key="AccentButtonBackground" Color="#E05252" />
+        <m:SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#EA6767" />
+        <m:SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#C44646" />
+        <m:SolidColorBrush x:Key="AccentButtonBackgroundDisabled" Color="#3A3F49" />
+        <m:SolidColorBrush x:Key="AccentButtonForeground" Color="#14090A" />
+        <m:SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#14090A" />
+        <m:SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#14090A" />
+        <m:SolidColorBrush x:Key="AccentButtonForegroundDisabled" Color="#6E7686" />
+
+        <!-- The primary (accent) button: the theme's accent style plus app shaping -->
+        <ui:Style x:Key="PrimaryButtonStyle" TargetType="c:Button" BasedOn="{StaticResource AccentButtonStyle}">
+            <ui:Setter Property="CornerRadius" Value="8" />
+            <ui:Setter Property="Padding" Value="16,7" />
+            <ui:Setter Property="FontWeight" Value="SemiBold" />
+        </ui:Style>
+
+        <!-- A small, quiet action button: toolbars and card footers -->
+        <ui:Style x:Key="SmallButtonStyle" TargetType="c:Button">
+            <ui:Setter Property="CornerRadius" Value="6" />
+            <ui:Setter Property="Padding" Value="11,5" />
+            <ui:Setter Property="MinWidth" Value="0" />
+            <ui:Setter Property="MinHeight" Value="0" />
+            <ui:Setter Property="FontSize" Value="12" />
+            <ui:Setter Property="BorderThickness" Value="1" />
+        </ui:Style>
+
+        <!-- Platform converters, so a plain bool can drive an IsEnabled or a Visibility
+             without the view model growing a property for it -->
+        <conv:BoolNegationConverter x:Key="Not" />
+        <conv:BoolToVisibilityConverter x:Key="VisibleWhenTrue" />
+        <conv:BoolToVisibilityConverter x:Key="VisibleWhenFalse" Invert="True" />
+
+        <!-- ═══════════════════ Shared item templates ═══════════════════ -->
+
+        <!-- One rail row: a full-bleed button whose brushes come from the item view model,
+             which is how the family does selection highlighting -->
+        <ui:DataTemplate x:Key="NavItemTemplate">
+            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                    Background="{d:Binding ItemBackground}" BorderThickness="0"
+                    CornerRadius="8" Padding="12,9" Margin="8,2"
+                    Command="{d:Binding SelectCommand}">
+                <Grid ColumnSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="{d:Binding Glyph}" FontSize="14"
+                              Foreground="{d:Binding ItemForeground}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{d:Binding Title}" FontSize="13"
+                               VerticalAlignment="Center"
+                               Foreground="{d:Binding ItemForeground}" />
+                    <Border Grid.Column="2" Background="{StaticResource CardWellBrush}"
+                            CornerRadius="9" Padding="7,1" Visibility="{d:Binding BadgeVisibility}">
+                        <TextBlock Text="{d:Binding BadgeText}" FontSize="10.5"
+                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                    </Border>
+                </Grid>
+            </Button>
+        </ui:DataTemplate>
+
+        <!-- One label/value row of a facts panel; the value picks its own font -->
+        <ui:DataTemplate x:Key="FactRowTemplate">
+            <Grid Padding="0,4" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{d:Binding Label}" FontSize="12"
+                           Foreground="{StaticResource TextTertiaryBrush}"
+                           TextWrapping="Wrap" />
+                <TextBlock Grid.Column="1" Text="{d:Binding Value}" FontSize="12"
+                           Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"
+                           Visibility="{d:Binding IsMonospace, Converter={StaticResource VisibleWhenFalse}}" />
+                <TextBlock Grid.Column="1" Text="{d:Binding Value}" FontSize="11.5"
+                           FontFamily="{StaticResource RobotoMonoFont}"
+                           Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"
+                           Visibility="{d:Binding IsMonospace, Converter={StaticResource VisibleWhenTrue}}" />
+            </Grid>
+        </ui:DataTemplate>
+
+        <!-- One copyable connection row of an instance card -->
+        <ui:DataTemplate x:Key="EndpointRowTemplate">
+            <Grid ColumnSpacing="8" Margin="0,2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="86" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{d:Binding Label}" FontSize="11"
+                           Foreground="{StaticResource TextTertiaryBrush}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{d:Binding Value}"
+                           FontFamily="{StaticResource RobotoMonoFont}" FontSize="11.5"
+                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                           Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="Copied" FontSize="10.5" Margin="0,0,4,0"
+                           Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"
+                           Visibility="{d:Binding CopiedVisibility}" />
+                <Button Grid.Column="3" Command="{d:Binding ToggleRevealCommand}"
+                        Content="{d:Binding RevealText}" FontSize="10.5"
+                        Height="24" MinWidth="0" MinHeight="0" Padding="7,0" CornerRadius="5"
+                        BorderThickness="0" Background="{StaticResource CardWellBrush}"
+                        Visibility="{d:Binding RevealVisibility}" />
+                <Button Grid.Column="4" Command="{d:Binding CopyCommand}"
+                        Width="26" Height="24" MinWidth="0" MinHeight="0" Padding="0"
+                        CornerRadius="5" Background="Transparent" BorderThickness="0"
+                        ToolTipService.ToolTip="Copy to clipboard">
+                    <FontIcon Glyph="&#xE8C8;" FontSize="12" />
+                </Button>
+            </Grid>
+        </ui:DataTemplate>
+
+        <!-- One node dot of an instance card -->
+        <ui:DataTemplate x:Key="InstanceNodeTemplate">
+            <Button Margin="0,0,10,6" Padding="9,5" CornerRadius="6" BorderThickness="1"
+                    Background="{StaticResource CardWellBrush}"
+                    BorderBrush="{StaticResource HairlineBrush}"
+                    Command="{d:Binding OpenCommand}"
+                    ToolTipService.ToolTip="Show this node's container">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                    <Border Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center"
+                            Background="{d:Binding DotBrush}" />
+                    <TextBlock Text="{d:Binding RoleText}" FontSize="11"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               VerticalAlignment="Center" />
+                    <TextBlock Text="{d:Binding PortText}" FontSize="11"
+                               FontFamily="{StaticResource RobotoMonoFont}"
+                               Foreground="{StaticResource TextPrimaryBrush}"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+        </ui:DataTemplate>
+
+        <!-- One Verify check line -->
+        <ui:DataTemplate x:Key="VerificationCheckTemplate">
+            <Grid ColumnSpacing="8" Margin="0,2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="170" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <FontIcon Glyph="{d:Binding Glyph}" FontSize="11"
+                          Foreground="{d:Binding Mark}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{d:Binding Name}" FontSize="11"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Text="{d:Binding Detail}" FontSize="11"
+                           FontFamily="{StaticResource RobotoMonoFont}"
+                           Foreground="{StaticResource TextTertiaryBrush}"
+                           TextTrimming="CharacterEllipsis" />
+            </Grid>
+        </ui:DataTemplate>
+
+        <!-- One plain text chip -->
+        <ui:DataTemplate x:Key="ChipTemplate">
+            <Border Background="{StaticResource CardWellBrush}" CornerRadius="4"
+                    Padding="7,2" Margin="0,0,6,4">
+                <TextBlock Text="{d:Binding}" FontSize="10"
+                           Foreground="{StaticResource TextSecondaryBrush}" />
+            </Border>
+        </ui:DataTemplate>
+
+        <!-- One plain monospace line, for note lists and tool output -->
+        <ui:DataTemplate x:Key="MonoLineTemplate">
+            <TextBlock Text="{d:Binding}" FontSize="11"
+                       FontFamily="{StaticResource RobotoMonoFont}"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       TextWrapping="Wrap" Margin="0,1" />
+        </ui:DataTemplate>
+
+        <!-- One accent-coloured validation or note line -->
+        <ui:DataTemplate x:Key="AccentLineTemplate">
+            <TextBlock Text="{d:Binding}" FontSize="11.5"
+                       Foreground="{StaticResource AccentBrush}"
+                       TextWrapping="Wrap" Margin="0,2" />
+        </ui:DataTemplate>
+
+        <!-- One row of a disk-usage card -->
+        <ui:DataTemplate x:Key="DiskRowTemplate">
+            <Grid ColumnSpacing="12" Margin="0,5">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="104" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{d:Binding Label}" FontSize="12"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                    <ProgressBar Height="4" Minimum="0" Maximum="100"
+                                 Value="{d:Binding Share}"
+                                 Foreground="{StaticResource AccentBrush}" Background="#262B34" />
+                    <TextBlock Text="{d:Binding ReclaimableText}" FontSize="10"
+                               Foreground="{StaticResource TextTertiaryBrush}" />
+                </StackPanel>
+                <TextBlock Grid.Column="2" Text="{d:Binding SizeText}" FontSize="12"
+                           FontFamily="{StaticResource RobotoMonoFont}"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           VerticalAlignment="Center" MinWidth="72" TextAlignment="Right" />
+            </Grid>
+        </ui:DataTemplate>
+
+        <!-- One advisor finding -->
+        <ui:DataTemplate x:Key="AdvisorFindingTemplate">
+            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                    Margin="0,0,0,7" Padding="12,9" CornerRadius="8" BorderThickness="1"
+                    Background="{StaticResource CardWellBrush}"
+                    BorderBrush="{StaticResource HairlineBrush}"
+                    Command="{d:Binding OpenCommand}">
+                <StackPanel Spacing="4">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Border Background="{d:Binding SeverityBrush}" CornerRadius="4"
+                                Padding="6,1" VerticalAlignment="Center">
+                            <TextBlock Text="{d:Binding SeverityText}" FontSize="9"
+                                       FontWeight="SemiBold" CharacterSpacing="60"
+                                       Foreground="#14090A" />
+                        </Border>
+                        <TextBlock Text="{d:Binding RuleId}" FontSize="11"
+                                   FontFamily="{StaticResource RobotoMonoFont}"
+                                   Foreground="{StaticResource TextTertiaryBrush}"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="{d:Binding ContainerName}" FontSize="11"
+                                   Foreground="{StaticResource TextTertiaryBrush}"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <TextBlock Text="{d:Binding Title}" FontSize="12.5" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="{d:Binding Detail}" FontSize="11.5"
+                               Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="{d:Binding Recommendation}" FontSize="11.5"
+                               Foreground="{StaticResource TextTertiaryBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Button>
+        </ui:DataTemplate>
+
+        <!-- One daemon event line -->
+        <ui:DataTemplate x:Key="EventRowTemplate">
+            <Grid ColumnSpacing="10" Margin="0,2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="66" />
+                    <ColumnDefinition Width="72" />
+                    <ColumnDefinition Width="92" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{d:Binding Time}" FontSize="11"
+                           FontFamily="{StaticResource RobotoMonoFont}"
+                           Foreground="{StaticResource TextTertiaryBrush}" />
+                <TextBlock Grid.Column="1" Text="{d:Binding Type}" FontSize="11"
+                           Foreground="{StaticResource TextTertiaryBrush}" />
+                <TextBlock Grid.Column="2" Text="{d:Binding Action}" FontSize="11"
+                           Foreground="{StaticResource AccentBrush}" />
+                <TextBlock Grid.Column="3" Text="{d:Binding Subject}" FontSize="11"
+                           FontFamily="{StaticResource RobotoMonoFont}"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           TextTrimming="CharacterEllipsis" />
+            </Grid>
+        </ui:DataTemplate>
+
+        <!-- One Redis instance card -->
+        <ui:DataTemplate x:Key="InstanceCardTemplate">
+            <Border Margin="0,0,14,14" Padding="16" CornerRadius="12" BorderThickness="1"
+                    Background="{StaticResource CardBrush}"
+                    BorderBrush="{StaticResource HairlineBrush}">
+                <StackPanel Spacing="10">
+
+                    <!-- Title row: topology chip, name, state pill -->
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Background="{StaticResource AccentDimBrush}" CornerRadius="5"
+                                Padding="8,3" VerticalAlignment="Center">
+                            <TextBlock Text="{d:Binding TopologyCode}" FontSize="11"
+                                       FontWeight="SemiBold" Foreground="#F2F4F8" />
+                        </Border>
+                        <TextBlock Grid.Column="1" Text="{d:Binding InstanceName}" FontSize="15"
+                                   FontWeight="SemiBold" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="7"
+                                    VerticalAlignment="Center">
+                            <Border Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center"
+                                    Background="{d:Binding StateBrush}" />
+                            <TextBlock Text="{d:Binding StateText}" FontSize="11.5"
+                                       Foreground="{StaticResource TextSecondaryBrush}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="{d:Binding Summary}" FontSize="11.5"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="{d:Binding OriginText}" FontSize="11"
+                                   Foreground="{StaticResource TextTertiaryBrush}" />
+                    </StackPanel>
+
+                    <!-- Nodes -->
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="NODES" FontSize="10" FontWeight="SemiBold"
+                                   CharacterSpacing="80"
+                                   Foreground="{StaticResource AccentBrush}" />
+                        <ItemsControl ItemsSource="{d:Binding Nodes}"
+                                      ItemTemplate="{StaticResource InstanceNodeTemplate}">
+                            <ItemsControl.ItemsPanel>
+                                <ui:ItemsPanelTemplate>
+                                    <c:WrapPanel Orientation="Horizontal" />
+                                </ui:ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- Connect -->
+                    <StackPanel Spacing="5">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="CONNECT" FontSize="10" FontWeight="SemiBold"
+                                       CharacterSpacing="80" VerticalAlignment="Center"
+                                       Foreground="{StaticResource AccentBrush}" />
+                            <Button Grid.Column="1" Content="Copy all"
+                                    Style="{StaticResource SmallButtonStyle}"
+                                    Command="{d:Binding CopyAllCommand}" />
+                        </Grid>
+                        <ItemsControl ItemsSource="{d:Binding ConnectionRows}"
+                                      ItemTemplate="{StaticResource EndpointRowTemplate}" />
+                        <TextBlock Text="The password is stored in a container label and is already visible through docker inspect — local development only."
+                                   FontSize="10" TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextTertiaryBrush}"
+                                   Visibility="{d:Binding PasswordWarningVisibility}" />
+                        <ItemsControl ItemsSource="{d:Binding Notes}"
+                                      ItemTemplate="{StaticResource MonoLineTemplate}"
+                                      Visibility="{d:Binding NotesVisibility}" />
+                    </StackPanel>
+
+                    <!-- Diagnostics strip (resource-capped topologies only) -->
+                    <StackPanel Spacing="5" Visibility="{d:Binding DiagnosticsVisibility}">
+                        <TextBlock Text="DIAGNOSTICS" FontSize="10" FontWeight="SemiBold"
+                                   CharacterSpacing="80"
+                                   Foreground="{StaticResource AccentBrush}" />
+                        <ProgressBar Height="4" Minimum="0" Maximum="100"
+                                     Value="{d:Binding MemoryShare}"
+                                     Foreground="{StaticResource AccentBrush}" Background="#262B34" />
+                        <ItemsControl ItemsSource="{d:Binding DiagnosticsRows}"
+                                      ItemTemplate="{StaticResource FactRowTemplate}" />
+                    </StackPanel>
+
+                    <!-- Verify result -->
+                    <StackPanel Spacing="5" Visibility="{d:Binding VerifyVisibility}">
+                        <TextBlock Text="{d:Binding VerifySummary}" FontSize="11.5"
+                                   FontWeight="SemiBold" TextWrapping="Wrap"
+                                   Foreground="{d:Binding VerifyBrush}" />
+                        <ItemsControl ItemsSource="{d:Binding VerifyChecks}"
+                                      ItemTemplate="{StaticResource VerificationCheckTemplate}" />
+                    </StackPanel>
+
+                    <TextBlock Text="{d:Binding ErrorText}" FontSize="11.5" TextWrapping="Wrap"
+                               Foreground="{StaticResource AccentBrush}"
+                               Visibility="{d:Binding ErrorVisibility}" />
+
+                    <!-- Actions -->
+                    <c:WrapPanel Orientation="Horizontal">
+                        <Button Content="Verify" Margin="0,0,7,0"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                Command="{d:Binding VerifyCommand}" />
+                        <Button Content="Console" Margin="0,0,7,0"
+                                Style="{StaticResource SmallButtonStyle}"
+                                Command="{d:Binding ConsoleCommand}" />
+                        <Button Content="Logs" Margin="0,0,7,0"
+                                Style="{StaticResource SmallButtonStyle}"
+                                Command="{d:Binding LogsCommand}" />
+                        <Button Content="Start" Margin="0,0,7,0"
+                                Style="{StaticResource SmallButtonStyle}"
+                                Command="{d:Binding StartCommand}" />
+                        <Button Content="Stop" Margin="0,0,7,0"
+                                Style="{StaticResource SmallButtonStyle}"
+                                Command="{d:Binding StopCommand}" />
+                        <Button Content="Restart" Margin="0,0,7,0"
+                                Style="{StaticResource SmallButtonStyle}"
+                                Command="{d:Binding RestartCommand}" />
+                        <Button Content="Destroy"
+                                Style="{StaticResource SmallButtonStyle}"
+                                Foreground="{StaticResource AccentBrush}"
+                                Command="{d:Binding DestroyCommand}" />
+                    </c:WrapPanel>
+                </StackPanel>
+            </Border>
+        </ui:DataTemplate>
+
+        <!-- One row of the topology catalog -->
+        <ui:DataTemplate x:Key="TopologyChoiceTemplate">
+            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                    Margin="0,0,0,6" Padding="11,9" CornerRadius="9" BorderThickness="1"
+                    Background="{d:Binding RowBackground}"
+                    BorderBrush="{d:Binding RowBorder}"
+                    Command="{d:Binding SelectCommand}">
+                <StackPanel Spacing="5">
+                    <Grid ColumnSpacing="9">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Background="{StaticResource AccentDimBrush}" CornerRadius="4"
+                                Padding="6,2" VerticalAlignment="Center">
+                            <TextBlock Text="{d:Binding Code}" FontSize="10.5"
+                                       FontWeight="SemiBold" Foreground="#F2F4F8" />
+                        </Border>
+                        <TextBlock Grid.Column="1" Text="{d:Binding DisplayName}" FontSize="12.5"
+                                   FontWeight="SemiBold" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="2" Text="{d:Binding CountText}" FontSize="10"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextTertiaryBrush}" />
+                    </Grid>
+                    <TextBlock Text="{d:Binding Summary}" FontSize="11"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               TextWrapping="Wrap" />
+                    <ItemsControl ItemsSource="{d:Binding Highlights}"
+                                  ItemTemplate="{StaticResource ChipTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ui:ItemsPanelTemplate>
+                                <c:WrapPanel Orientation="Horizontal" />
+                            </ui:ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+            </Button>
+        </ui:DataTemplate>
+
+        <!-- One category of the topology catalog -->
+        <ui:DataTemplate x:Key="TopologyGroupTemplate">
+            <StackPanel Spacing="6" Margin="0,0,0,12">
+                <TextBlock Text="{d:Binding Title}" FontSize="10" FontWeight="SemiBold"
+                           CharacterSpacing="80"
+                           Foreground="{StaticResource AccentBrush}" />
+                <ItemsControl ItemsSource="{d:Binding Items}"
+                              ItemTemplate="{StaticResource TopologyChoiceTemplate}" />
+            </StackPanel>
+        </ui:DataTemplate>
+
+        <!-- One generated field of the create form. The family has no DataTemplateSelector, so
+             all six editors live here and exactly one of them is visible. -->
+        <ui:DataTemplate x:Key="ParameterFieldTemplate">
+            <StackPanel Spacing="4" Margin="0,0,0,14">
+                <TextBlock Text="{d:Binding Label}" FontSize="11.5" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextSecondaryBrush}" />
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBox CornerRadius="8" Visibility="{d:Binding TextVisibility}"
+                             Text="{d:Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <PasswordBox CornerRadius="8" Visibility="{d:Binding PasswordVisibility}"
+                                 Password="{d:Binding Value, Mode=TwoWay}" />
+                    <NumberBox CornerRadius="8" Visibility="{d:Binding IntegerVisibility}"
+                               Minimum="{d:Binding Minimum}" Maximum="{d:Binding Maximum}"
+                               SpinButtonPlacementMode="Inline"
+                               Value="{d:Binding NumberValue, Mode=TwoWay}" />
+                    <ComboBox HorizontalAlignment="Stretch" CornerRadius="8"
+                              Visibility="{d:Binding ChoiceVisibility}"
+                              ItemsSource="{d:Binding Choices}"
+                              SelectedItem="{d:Binding Value, Mode=TwoWay}" />
+                    <ToggleSwitch Header="" Visibility="{d:Binding BooleanVisibility}"
+                                  IsOn="{d:Binding BoolValue, Mode=TwoWay}" />
+                    <TextBox CornerRadius="8" AcceptsReturn="True" TextWrapping="Wrap"
+                             MinHeight="90" FontSize="12"
+                             FontFamily="{StaticResource RobotoMonoFont}"
+                             Visibility="{d:Binding MultiLineVisibility}"
+                             Text="{d:Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <Button Grid.Column="1" Content="Generate" VerticalAlignment="Top"
+                            Style="{StaticResource SmallButtonStyle}"
+                            Visibility="{d:Binding GenerateVisibility}"
+                            Command="{d:Binding GenerateCommand}" />
+                </Grid>
+                <TextBlock Text="{d:Binding HelpText}" FontSize="10.5" TextWrapping="Wrap"
+                           Foreground="{StaticResource TextTertiaryBrush}"
+                           Visibility="{d:Binding HelpVisibility}" />
+            </StackPanel>
+        </ui:DataTemplate>
+
+        <!-- One row of the container list -->
+        <ui:DataTemplate x:Key="ContainerRowTemplate">
+            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                    Margin="0,0,0,3" Padding="11,8" CornerRadius="8" BorderThickness="0"
+                    Background="{d:Binding RowBackground}"
+                    Command="{d:Binding SelectCommand}">
+                <StackPanel Spacing="3">
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center"
+                                Background="{d:Binding DotBrush}" />
+                        <TextBlock Grid.Column="1" Text="{d:Binding Name}" FontSize="12.5"
+                                   FontWeight="SemiBold" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <Border Grid.Column="2" Background="{StaticResource AccentDimBrush}"
+                                CornerRadius="4" Padding="6,1" VerticalAlignment="Center"
+                                Visibility="{d:Binding TopologyVisibility}">
+                            <TextBlock Text="{d:Binding TopologyCode}" FontSize="9.5"
+                                       FontWeight="SemiBold" Foreground="#F2F4F8" />
+                        </Border>
+                    </Grid>
+                    <TextBlock Text="{d:Binding Image}" FontSize="11" Margin="16,0,0,0"
+                               Foreground="{StaticResource TextTertiaryBrush}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{d:Binding PortsText}" FontSize="10.5" Margin="16,0,0,0"
+                               FontFamily="{StaticResource RobotoMonoFont}"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               TextTrimming="CharacterEllipsis"
+                               Visibility="{d:Binding PortsVisibility}" />
+                    <TextBlock Text="{d:Binding StatusText}" FontSize="10.5" Margin="16,0,0,0"
+                               Foreground="{StaticResource TextTertiaryBrush}"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Button>
+        </ui:DataTemplate>
+
+        <!-- One bar of the stats sparkline -->
+        <ui:DataTemplate x:Key="SparkBarTemplate">
+            <Border Width="5" Margin="1,0" VerticalAlignment="Bottom" CornerRadius="1"
+                    Height="{d:Binding BarHeight}"
+                    Background="{StaticResource AccentDimBrush}" />
+        </ui:DataTemplate>
+
+        <!-- One card of the container Diagnostics tab -->
+        <ui:DataTemplate x:Key="DiagnosticCardTemplate">
+            <Border Margin="0,0,14,14" Padding="16,13" CornerRadius="12" BorderThickness="1"
+                    Width="380" VerticalAlignment="Top"
+                    Background="{StaticResource CardBrush}"
+                    BorderBrush="{StaticResource HairlineBrush}">
+                <StackPanel Spacing="8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{d:Binding Title}" FontSize="13" FontWeight="SemiBold"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextPrimaryBrush}" />
+                        <Border Grid.Column="1" Background="{d:Binding ChipBrush}"
+                                CornerRadius="4" Padding="7,2">
+                            <TextBlock Text="{d:Binding ChipText}" FontSize="9.5"
+                                       FontWeight="SemiBold" CharacterSpacing="60"
+                                       Foreground="#14090A" />
+                        </Border>
+                    </Grid>
+                    <TextBlock Text="{d:Binding Interpretation}" FontSize="11.5"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource TextSecondaryBrush}" />
+                    <ItemsControl ItemsSource="{d:Binding Facts}"
+                                  ItemTemplate="{StaticResource FactRowTemplate}" />
+                </StackPanel>
+            </Border>
+        </ui:DataTemplate>
+
+        <!-- The one-line status strip above a console's terminal. It is a ContentTemplate
+             rather than markup, because the tab that hosts it is built in code-behind. -->
+        <ui:DataTemplate x:Key="ConsoleStatusTemplate">
+            <Border Padding="14,7" BorderThickness="0,0,0,1"
+                    Background="{StaticResource HeaderBrush}"
+                    BorderBrush="{StaticResource HairlineBrush}">
+                <Grid ColumnSpacing="14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center"
+                            Background="{d:Binding StateBrush}" />
+                    <TextBlock Grid.Column="1" Text="{d:Binding ShellPath}" FontSize="11.5"
+                               FontFamily="{StaticResource RobotoMonoFont}"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextPrimaryBrush}" />
+                    <TextBlock Grid.Column="2" Text="{d:Binding GridText}" FontSize="11.5"
+                               FontFamily="{StaticResource RobotoMonoFont}"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextTertiaryBrush}" />
+                    <TextBlock Grid.Column="3" Text="{d:Binding StateText}" FontSize="11.5"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}" />
+                    <Button Grid.Column="4" Content="Reopen"
+                            Style="{StaticResource SmallButtonStyle}"
+                            Visibility="{d:Binding ReopenVisibility}"
+                            Command="{d:Binding ReopenCommand}" />
+                    <Button Grid.Column="5" Content="Close"
+                            Style="{StaticResource SmallButtonStyle}"
+                            Command="{d:Binding CloseCommand}" />
+                </Grid>
+            </Border>
+        </ui:DataTemplate>
+
+        <!-- One row of the image list -->
+        <ui:DataTemplate x:Key="ImageRowTemplate">
+            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                    Margin="0,0,0,3" Padding="11,8" CornerRadius="8" BorderThickness="0"
+                    Background="{d:Binding RowBackground}"
+                    Command="{d:Binding SelectCommand}">
+                <StackPanel Spacing="3">
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{d:Binding DisplayName}" FontSize="12.5"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <Border Grid.Column="1" Background="{StaticResource AccentDimBrush}"
+                                CornerRadius="4" Padding="6,1" VerticalAlignment="Center"
+                                Visibility="{d:Binding DanglingVisibility}">
+                            <TextBlock Text="dangling" FontSize="9.5" Foreground="#F2F4F8" />
+                        </Border>
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <TextBlock Text="{d:Binding ShortId}" FontSize="10.5"
+                                   FontFamily="{StaticResource RobotoMonoFont}"
+                                   Foreground="{StaticResource TextTertiaryBrush}" />
+                        <TextBlock Text="{d:Binding SizeText}" FontSize="10.5"
+                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                        <TextBlock Text="{d:Binding CreatedText}" FontSize="10.5"
+                                   Foreground="{StaticResource TextTertiaryBrush}" />
+                        <TextBlock Text="{d:Binding ContainerText}" FontSize="10.5"
+                                   Foreground="{StaticResource TextTertiaryBrush}" />
+                    </StackPanel>
+                </StackPanel>
+            </Button>
+        </ui:DataTemplate>
+
+        <!-- One vulnerability from an image scan -->
+        <ui:DataTemplate x:Key="VulnerabilityTemplate">
+            <Grid ColumnSpacing="10" Margin="0,3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="150" />
+                    <ColumnDefinition Width="200" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border Background="{d:Binding SeverityBrush}" CornerRadius="4" Padding="6,1"
+                        VerticalAlignment="Center" MinWidth="62">
+                    <TextBlock Text="{d:Binding Severity}" FontSize="9" FontWeight="SemiBold"
+                               CharacterSpacing="60" Foreground="#14090A"
+                               TextAlignment="Center" />
+                </Border>
+                <TextBlock Grid.Column="1" Text="{d:Binding Id}" FontSize="11"
+                           FontFamily="{StaticResource RobotoMonoFont}"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Text="{d:Binding Package}" FontSize="11"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="3" Text="{d:Binding Fix}" FontSize="11"
+                           Foreground="{StaticResource TextTertiaryBrush}"
+                           TextTrimming="CharacterEllipsis" />
+            </Grid>
+        </ui:DataTemplate>
+
+        <!-- One row of the network list -->
+        <ui:DataTemplate x:Key="NetworkRowTemplate">
+            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                    Margin="0,0,0,3" Padding="11,7" CornerRadius="8" BorderThickness="0"
+                    Background="{d:Binding RowBackground}"
+                    Command="{d:Binding SelectCommand}">
+                <StackPanel Spacing="2">
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{d:Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <Border Grid.Column="1" Background="{StaticResource AccentDimBrush}"
+                                CornerRadius="4" Padding="6,1" VerticalAlignment="Center"
+                                Visibility="{d:Binding ManagedVisibility}">
+                            <TextBlock Text="instance" FontSize="9.5" Foreground="#F2F4F8" />
+                        </Border>
+                        <TextBlock Grid.Column="2" Text="{d:Binding AttachedText}" FontSize="10.5"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextTertiaryBrush}" />
+                    </Grid>
+                    <TextBlock Text="{d:Binding Detail}" FontSize="10.5"
+                               FontFamily="{StaticResource RobotoMonoFont}"
+                               Foreground="{StaticResource TextTertiaryBrush}"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Button>
+        </ui:DataTemplate>
+
+        <!-- One row of the volume list -->
+        <ui:DataTemplate x:Key="VolumeRowTemplate">
+            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                    Margin="0,0,0,3" Padding="11,7" CornerRadius="8" BorderThickness="0"
+                    Background="{d:Binding RowBackground}"
+                    Command="{d:Binding SelectCommand}">
+                <StackPanel Spacing="2">
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{d:Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                                   FontFamily="{StaticResource RobotoMonoFont}"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <Border Grid.Column="1" Background="{StaticResource AccentDimBrush}"
+                                CornerRadius="4" Padding="6,1" VerticalAlignment="Center"
+                                Visibility="{d:Binding ManagedVisibility}">
+                            <TextBlock Text="instance" FontSize="9.5" Foreground="#F2F4F8" />
+                        </Border>
+                        <TextBlock Grid.Column="2" Text="{d:Binding RefCountText}" FontSize="10.5"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextTertiaryBrush}" />
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <TextBlock Text="{d:Binding SizeText}" FontSize="10.5"
+                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                        <TextBlock Text="{d:Binding CreatedText}" FontSize="10.5"
+                                   Foreground="{StaticResource TextTertiaryBrush}" />
+                    </StackPanel>
+                </StackPanel>
+            </Button>
+        </ui:DataTemplate>
+    </Page.Resources>
+
+    <Grid x:Name="RootGrid" RequestedTheme="Dark" Background="{StaticResource WindowBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="216" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- ═══════════════════ HEADER ═══════════════════ -->
+        <Border Grid.Row="0" Grid.ColumnSpan="2" Background="{StaticResource HeaderBrush}"
+                BorderBrush="{StaticResource HairlineBrush}" BorderThickness="0,0,0,1"
+                Padding="20,10">
+            <Grid ColumnSpacing="14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Spacing="1">
+                    <StackPanel Orientation="Horizontal" Spacing="9">
+                        <Border Width="10" Height="10" CornerRadius="5" VerticalAlignment="Center"
+                                Background="{StaticResource AccentBrush}" />
+                        <TextBlock Text="{d:Binding AppTitle}" FontSize="17" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Text="{d:Binding AppSubtitle}" FontSize="11"
+                               Foreground="{StaticResource TextTertiaryBrush}" />
+                </StackPanel>
+
+                <TextBlock Grid.Column="2" Text="{d:Binding LastRefreshedText}" FontSize="11"
+                           Foreground="{StaticResource TextTertiaryBrush}"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                           MaxWidth="340" />
+
+                <Border Grid.Column="3" CornerRadius="10" Padding="11,4"
+                        Background="{StaticResource CardWellBrush}" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Border Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center"
+                                Background="{d:Binding DaemonPillBrush}" />
+                        <TextBlock Text="{d:Binding DaemonPillText}" FontSize="11.5"
+                                   FontFamily="{StaticResource RobotoMonoFont}"
+                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                    </StackPanel>
+                </Border>
+
+                <Button Grid.Column="4" Command="{d:Binding RefreshCommand}"
+                        Style="{StaticResource SmallButtonStyle}" VerticalAlignment="Center"
+                        ToolTipService.ToolTip="Refresh everything">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <FontIcon Glyph="&#xE72C;" FontSize="12" VerticalAlignment="Center" />
+                        <TextBlock Text="Refresh" FontSize="12" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- ═══════════════════ RAIL ═══════════════════ -->
+        <Border Grid.Row="1" Grid.Column="0" Background="{StaticResource HeaderBrush}"
+                BorderBrush="{StaticResource HairlineBrush}" BorderThickness="0,0,1,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,10">
+                    <ItemsControl ItemsSource="{d:Binding NavigationItems}"
+                                  ItemTemplate="{StaticResource NavItemTemplate}" />
+                </ScrollViewer>
+                <StackPanel Grid.Row="1" Padding="16,10" Spacing="3">
+                    <Border Height="1" Background="{StaticResource HairlineBrush}"
+                            Margin="0,0,0,8" />
+                    <TextBlock Text="{d:Binding FooterInstanceText}" FontSize="11"
+                               Foreground="{StaticResource TextTertiaryBrush}" />
+                    <TextBlock Text="{d:Binding FooterContainerText}" FontSize="11"
+                               Foreground="{StaticResource TextTertiaryBrush}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ═══════════════════ SECTIONS ═══════════════════
+             Eight sibling grids in one cell, switched by Visibility. Each scopes its own child
+             view model with DataContext, which is the family's proven in-page navigation shape;
+             it also keeps every section's live state alive while another one is on screen. -->
+        <Grid Grid.Row="1" Grid.Column="1">
+
+            <!-- ───────────── 1. DASHBOARD ───────────── -->
+            <Grid Visibility="{d:Binding DataContext.DashboardVisibility, ElementName=RootGrid}"
+                  DataContext="{d:Binding Dashboard}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24,20,24,24">
+                    <StackPanel Spacing="16" MaxWidth="1180" HorizontalAlignment="Left">
+
+                        <!-- Counter strip -->
+                        <c:WrapPanel Orientation="Horizontal">
+                            <Button Width="220" Height="92" Margin="0,0,14,14" Padding="16,12"
+                                    CornerRadius="12" BorderThickness="1"
+                                    HorizontalContentAlignment="Stretch"
+                                    VerticalContentAlignment="Stretch"
+                                    Background="{StaticResource CardBrush}"
+                                    BorderBrush="{StaticResource HairlineBrush}"
+                                    Command="{d:Binding GoToInstancesCommand}">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Text="REDIS INSTANCES" FontSize="10"
+                                               FontWeight="SemiBold" CharacterSpacing="80"
+                                               Foreground="{StaticResource AccentBrush}" />
+                                    <TextBlock Text="{d:Binding InstanceCountText}" FontSize="26"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimaryBrush}" />
+                                    <TextBlock Text="running / total" FontSize="10.5"
+                                               Foreground="{StaticResource TextTertiaryBrush}" />
+                                </StackPanel>
+                            </Button>
+                            <Button Width="220" Height="92" Margin="0,0,14,14" Padding="16,12"
+                                    CornerRadius="12" BorderThickness="1"
+                                    HorizontalContentAlignment="Stretch"
+                                    VerticalContentAlignment="Stretch"
+                                    Background="{StaticResource CardBrush}"
+                                    BorderBrush="{StaticResource HairlineBrush}"
+                                    Command="{d:Binding GoToContainersCommand}">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Text="CONTAINERS" FontSize="10"
+                                               FontWeight="SemiBold" CharacterSpacing="80"
+                                               Foreground="{StaticResource AccentBrush}" />
+                                    <TextBlock Text="{d:Binding ContainerCountText}" FontSize="26"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimaryBrush}" />
+                                    <TextBlock Text="running / total" FontSize="10.5"
+                                               Foreground="{StaticResource TextTertiaryBrush}" />
+                                </StackPanel>
+                            </Button>
+                            <Button Width="220" Height="92" Margin="0,0,14,14" Padding="16,12"
+                                    CornerRadius="12" BorderThickness="1"
+                                    HorizontalContentAlignment="Stretch"
+                                    VerticalContentAlignment="Stretch"
+                                    Background="{StaticResource CardBrush}"
+                                    BorderBrush="{StaticResource HairlineBrush}"
+                                    Command="{d:Binding GoToImagesCommand}">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Text="IMAGES" FontSize="10"
+                                               FontWeight="SemiBold" CharacterSpacing="80"
+                                               Foreground="{StaticResource AccentBrush}" />
+                                    <TextBlock Text="{d:Binding ImageCountText}" FontSize="26"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimaryBrush}" />
+                                    <TextBlock Text="on the daemon" FontSize="10.5"
+                                               Foreground="{StaticResource TextTertiaryBrush}" />
+                                </StackPanel>
+                            </Button>
+                            <Button Width="220" Height="92" Margin="0,0,14,14" Padding="16,12"
+                                    CornerRadius="12" BorderThickness="1"
+                                    HorizontalContentAlignment="Stretch"
+                                    VerticalContentAlignment="Stretch"
+                                    Background="{StaticResource CardBrush}"
+                                    BorderBrush="{StaticResource HairlineBrush}"
+                                    Command="{d:Binding GoToVolumesCommand}">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Text="VOLUMES" FontSize="10"
+                                               FontWeight="SemiBold" CharacterSpacing="80"
+                                               Foreground="{StaticResource AccentBrush}" />
+                                    <TextBlock Text="{d:Binding VolumeCountText}" FontSize="26"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimaryBrush}" />
+                                    <TextBlock Text="on the daemon" FontSize="10.5"
+                                               Foreground="{StaticResource TextTertiaryBrush}" />
+                                </StackPanel>
+                            </Button>
+                        </c:WrapPanel>
+
+                        <!-- Daemon + disk, side by side -->
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Padding="18,15" CornerRadius="12"
+                                    BorderThickness="1" VerticalAlignment="Top"
+                                    Background="{StaticResource CardBrush}"
+                                    BorderBrush="{StaticResource HairlineBrush}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="DAEMON" FontSize="11" FontWeight="SemiBold"
+                                               CharacterSpacing="80"
+                                               Foreground="{StaticResource AccentBrush}" />
+                                    <Border CornerRadius="8" Padding="12,9"
+                                            Background="{StaticResource CardWellBrush}"
+                                            BorderThickness="1"
+                                            BorderBrush="{StaticResource AccentDimBrush}"
+                                            Visibility="{d:Binding WarningsVisibility}">
+                                        <ItemsControl ItemsSource="{d:Binding Warnings}"
+                                                      ItemTemplate="{StaticResource AccentLineTemplate}" />
+                                    </Border>
+                                    <ItemsControl ItemsSource="{d:Binding DaemonFacts}"
+                                                  ItemTemplate="{StaticResource FactRowTemplate}" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="1" Padding="18,15" CornerRadius="12"
+                                    BorderThickness="1" VerticalAlignment="Top"
+                                    Background="{StaticResource CardBrush}"
+                                    BorderBrush="{StaticResource HairlineBrush}">
+                                <StackPanel Spacing="8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="DISK USAGE" FontSize="11"
+                                                   FontWeight="SemiBold" CharacterSpacing="80"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{StaticResource AccentBrush}" />
+                                        <TextBlock Grid.Column="1" Text="{d:Binding TotalDiskText}"
+                                                   FontSize="13" FontWeight="SemiBold"
+                                                   FontFamily="{StaticResource RobotoMonoFont}"
+                                                   Foreground="{StaticResource TextPrimaryBrush}" />
+                                    </Grid>
+                                    <ItemsControl ItemsSource="{d:Binding DiskRows}"
+                                                  ItemTemplate="{StaticResource DiskRowTemplate}" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!-- Advisor + recent activity, side by side -->
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Padding="18,15" CornerRadius="12"
+                                    BorderThickness="1" VerticalAlignment="Top"
+                                    Background="{StaticResource CardBrush}"
+                                    BorderBrush="{StaticResource HairlineBrush}">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="ADVISOR" FontSize="11" FontWeight="SemiBold"
+                                               CharacterSpacing="80"
+                                               Foreground="{StaticResource AccentBrush}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="20">
+                                        <StackPanel>
+                                            <TextBlock Text="{d:Binding AdvisorCriticalText}"
+                                                       FontSize="22" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource AccentBrush}" />
+                                            <TextBlock Text="critical" FontSize="10.5"
+                                                       Foreground="{StaticResource TextTertiaryBrush}" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Text="{d:Binding AdvisorWarningText}"
+                                                       FontSize="22" FontWeight="SemiBold"
+                                                       Foreground="#D9A05B" />
+                                            <TextBlock Text="warnings" FontSize="10.5"
+                                                       Foreground="{StaticResource TextTertiaryBrush}" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Text="{d:Binding AdvisorInfoText}"
+                                                       FontSize="22" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource TextSecondaryBrush}" />
+                                            <TextBlock Text="informational" FontSize="10.5"
+                                                       Foreground="{StaticResource TextTertiaryBrush}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <TextBlock Text="Nothing to report — the advisor is happy with every container."
+                                               FontSize="11.5" TextWrapping="Wrap"
+                                               Foreground="{StaticResource TextTertiaryBrush}"
+                                               Visibility="{d:Binding NoFindingsVisibility}" />
+                                    <ItemsControl ItemsSource="{d:Binding TopFindings}"
+                                                  ItemTemplate="{StaticResource AdvisorFindingTemplate}" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="1" Padding="18,15" CornerRadius="12"
+                                    BorderThickness="1" VerticalAlignment="Top"
+                                    Background="{StaticResource CardBrush}"
+                                    BorderBrush="{StaticResource HairlineBrush}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="RECENT ACTIVITY" FontSize="11"
+                                               FontWeight="SemiBold" CharacterSpacing="80"
+                                               Foreground="{StaticResource AccentBrush}" />
+                                    <TextBlock Text="Nothing has happened on the daemon since this window opened."
+                                               FontSize="11.5" TextWrapping="Wrap"
+                                               Foreground="{StaticResource TextTertiaryBrush}"
+                                               Visibility="{d:Binding RecentEventsVisibility, Converter={StaticResource VisibleWhenFalse}}" />
+                                    <ItemsControl ItemsSource="{d:Binding RecentEvents}"
+                                                  ItemTemplate="{StaticResource EventRowTemplate}" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- ───────────── 2. REDIS INSTANCES ───────────── -->
+            <Grid Visibility="{d:Binding DataContext.InstancesVisibility, ElementName=RootGrid}"
+                  DataContext="{d:Binding Instances}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Padding="24,14" BorderThickness="0,0,0,1"
+                        BorderBrush="{StaticResource HairlineBrush}">
+                    <c:WrapPanel Orientation="Horizontal">
+                        <StackPanel Spacing="1" Margin="0,0,24,6" MinWidth="220">
+                            <TextBlock Text="Redis instances" FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}" />
+                            <TextBlock Text="{d:Binding CountText}" FontSize="11"
+                                       Foreground="{StaticResource TextTertiaryBrush}" />
+                        </StackPanel>
+                        <ComboBox Width="230" Margin="0,0,10,6" CornerRadius="8"
+                                  VerticalAlignment="Center"
+                                  ItemsSource="{d:Binding TopologyFilterOptions}"
+                                  SelectedItem="{d:Binding TopologyFilter, Mode=TwoWay}" />
+                        <ComboBox Width="130" Margin="0,0,10,6" CornerRadius="8"
+                                  VerticalAlignment="Center"
+                                  ItemsSource="{d:Binding StateFilterOptions}"
+                                  SelectedItem="{d:Binding StateFilter, Mode=TwoWay}" />
+                        <TextBox Width="190" Margin="0,0,10,6" CornerRadius="8"
+                                 VerticalAlignment="Center" PlaceholderText="Search by name…"
+                                 Text="{d:Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Content="Clear" Margin="0,0,10,6" VerticalAlignment="Center"
+                                Style="{StaticResource SmallButtonStyle}"
+                                Command="{d:Binding ClearFiltersCommand}" />
+                        <Button Content="New instance" Margin="0,0,10,6" VerticalAlignment="Center"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                Command="{d:Binding NewInstanceCommand}" />
+                        <Button Content="Sweep all" Margin="0,0,0,6" VerticalAlignment="Center"
+                                Style="{StaticResource SmallButtonStyle}"
+                                Foreground="{StaticResource AccentBrush}"
+                                Command="{d:Binding SweepAllCommand}" />
+                    </c:WrapPanel>
+                </Border>
+
+                <ScrollViewer Grid.Row="1" Padding="24,18,10,18" VerticalScrollBarVisibility="Auto"
+                              Visibility="{d:Binding ListVisibility}">
+                    <ItemsRepeater ItemsSource="{d:Binding Instances}"
+                                   ItemTemplate="{StaticResource InstanceCardTemplate}">
+                        <ItemsRepeater.Layout>
+                            <UniformGridLayout Orientation="Horizontal"
+                                               MinItemWidth="470" MinItemHeight="330"
+                                               MinColumnSpacing="0" MinRowSpacing="0"
+                                               ItemsStretch="Fill" />
+                        </ItemsRepeater.Layout>
+                    </ItemsRepeater>
+                </ScrollViewer>
+
+                <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Spacing="14" MaxWidth="460"
+                            Visibility="{d:Binding EmptyVisibility}">
+                    <TextBlock Text="{d:Binding EmptyText}" FontSize="14" TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource TextSecondaryBrush}" />
+                    <Button Content="Create an instance" HorizontalAlignment="Center"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            Command="{d:Binding NewInstanceCommand}" />
+                </StackPanel>
+
+                <TextBlock Grid.Row="1" Text="{d:Binding ErrorText}" FontSize="12"
+                           Margin="24,0,24,14" TextWrapping="Wrap"
+                           VerticalAlignment="Bottom"
+                           Foreground="{StaticResource AccentBrush}"
+                           Visibility="{d:Binding ErrorVisibility}" />
+            </Grid>
+
+            <!-- ───────────── 3. CREATE INSTANCE ───────────── -->
+            <Grid Visibility="{d:Binding DataContext.CreateInstanceVisibility, ElementName=RootGrid}"
+                  DataContext="{d:Binding CreateInstance}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="348" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- The catalog -->
+                <Border Grid.Column="0" BorderThickness="0,0,1,0"
+                        BorderBrush="{StaticResource HairlineBrush}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Padding="18,15,18,8" Spacing="2">
+                            <TextBlock Text="Topology catalog" FontSize="15" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}" />
+                            <TextBlock Text="Thirteen presets, each a shape worth having ready."
+                                       FontSize="11" TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextTertiaryBrush}" />
+                        </StackPanel>
+                        <ScrollViewer Grid.Row="1" Padding="16,4,14,16"
+                                      VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{d:Binding Groups}"
+                                          ItemTemplate="{StaticResource TopologyGroupTemplate}" />
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <!-- The chosen topology, its form, its ports and the create strip -->
+                <ScrollViewer Grid.Column="1" Padding="24,20,24,24"
+                              VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="16" MaxWidth="720" HorizontalAlignment="Left">
+
+                        <StackPanel Spacing="7">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Border Background="{StaticResource AccentDimBrush}"
+                                        CornerRadius="5" Padding="9,3" VerticalAlignment="Center">
+                                    <TextBlock Text="{d:Binding SelectedCode}" FontSize="12"
+                                               FontWeight="SemiBold" Foreground="#F2F4F8" />
+                                </Border>
+                                <TextBlock Text="{d:Binding SelectedTitle}" FontSize="19"
+                                           FontWeight="SemiBold" VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextPrimaryBrush}" />
+                            </StackPanel>
+                            <TextBlock Text="{d:Binding SelectedOrigin}" FontSize="11"
+                                       FontFamily="{StaticResource RobotoMonoFont}"
+                                       Foreground="{StaticResource TextTertiaryBrush}" />
+                            <TextBlock Text="{d:Binding SelectedDetail}" FontSize="12.5"
+                                       LineHeight="20" TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextSecondaryBrush}" />
+                        </StackPanel>
+
+                        <Border Padding="18,15" CornerRadius="12" BorderThickness="1"
+                                Background="{StaticResource CardBrush}"
+                                BorderBrush="{StaticResource HairlineBrush}">
+                            <StackPanel Spacing="12"
+                                        IsEnabled="{d:Binding FormEnabled}">
+                                <TextBlock Text="SETTINGS" FontSize="11" FontWeight="SemiBold"
+                                           CharacterSpacing="80"
+                                           Foreground="{StaticResource AccentBrush}" />
+
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Instance name" FontSize="11.5"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextSecondaryBrush}" />
+                                    <TextBox CornerRadius="8"
+                                             PlaceholderText="A name you will recognise later"
+                                             Text="{d:Binding InstanceName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Text="Used for the container, volume and network names, and shown on the card."
+                                               FontSize="10.5" TextWrapping="Wrap"
+                                               Foreground="{StaticResource TextTertiaryBrush}" />
+                                </StackPanel>
+
+                                <ItemsControl ItemsSource="{d:Binding Fields}"
+                                              ItemTemplate="{StaticResource ParameterFieldTemplate}"
+                                              Visibility="{d:Binding FieldsVisibility}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Padding="16,13" CornerRadius="12" BorderThickness="1"
+                                Background="{StaticResource CardWellBrush}"
+                                BorderBrush="{StaticResource HairlineBrush}">
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="HOST PORTS" FontSize="10" FontWeight="SemiBold"
+                                           CharacterSpacing="80"
+                                           Foreground="{StaticResource AccentBrush}" />
+                                <TextBlock Text="{d:Binding PortPlanText}" FontSize="12"
+                                           FontFamily="{StaticResource RobotoMonoFont}"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource TextPrimaryBrush}" />
+                                <TextBlock Text="A preview only — the ports are reserved when the instance is created."
+                                           FontSize="10.5"
+                                           Foreground="{StaticResource TextTertiaryBrush}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Padding="16,13" CornerRadius="12" BorderThickness="1"
+                                Background="{StaticResource CardWellBrush}"
+                                BorderBrush="{StaticResource AccentDimBrush}"
+                                Visibility="{d:Binding ValidationVisibility}">
+                            <StackPanel Spacing="3">
+                                <TextBlock Text="NOT READY YET" FontSize="10" FontWeight="SemiBold"
+                                           CharacterSpacing="80"
+                                           Foreground="{StaticResource AccentBrush}" />
+                                <ItemsControl ItemsSource="{d:Binding ValidationMessages}"
+                                              ItemTemplate="{StaticResource AccentLineTemplate}" />
+                            </StackPanel>
+                        </Border>
+
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Content="Create instance"
+                                    Style="{StaticResource PrimaryButtonStyle}"
+                                    Command="{d:Binding CreateCommand}" />
+                            <Button Content="Cancel" Style="{StaticResource SmallButtonStyle}"
+                                    Command="{d:Binding CancelCommand}" />
+                        </StackPanel>
+
+                        <Border Padding="16,13" CornerRadius="12" BorderThickness="1"
+                                Background="{StaticResource CardBrush}"
+                                BorderBrush="{StaticResource HairlineBrush}"
+                                Visibility="{d:Binding ProgressVisibility}">
+                            <StackPanel Spacing="8">
+                                <ProgressBar Height="4" IsIndeterminate="True"
+                                             Foreground="{StaticResource AccentBrush}"
+                                             Background="#262B34"
+                                             Visibility="{d:Binding IsCreating, Converter={StaticResource VisibleWhenTrue}}" />
+                                <TextBlock Text="{d:Binding ProgressHeadline}" FontSize="13"
+                                           FontWeight="SemiBold" TextWrapping="Wrap"
+                                           Foreground="{StaticResource TextPrimaryBrush}" />
+                                <ItemsControl ItemsSource="{d:Binding ProgressLines}"
+                                              ItemTemplate="{StaticResource MonoLineTemplate}" />
+                                <TextBlock Text="{d:Binding ErrorText}" FontSize="11.5"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource AccentBrush}"
+                                           Visibility="{d:Binding ErrorVisibility}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- ───────────── 4. CONTAINERS ───────────── -->
+            <Grid Visibility="{d:Binding DataContext.ContainersVisibility, ElementName=RootGrid}"
+                  DataContext="{d:Binding Containers}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="372" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- The list -->
+                <Border Grid.Column="0" BorderThickness="0,0,1,0"
+                        BorderBrush="{StaticResource HairlineBrush}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Padding="18,15,18,10" Spacing="8">
+                            <StackPanel Spacing="1">
+                                <TextBlock Text="Containers" FontSize="15" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimaryBrush}" />
+                                <TextBlock Text="{d:Binding CountText}" FontSize="11"
+                                           Foreground="{StaticResource TextTertiaryBrush}" />
+                            </StackPanel>
+                            <ComboBox HorizontalAlignment="Stretch" CornerRadius="8"
+                                      ItemsSource="{d:Binding FilterOptions}"
+                                      SelectedItem="{d:Binding Filter, Mode=TwoWay}" />
+                            <TextBox CornerRadius="8" PlaceholderText="Search name, image or id…"
+                                     Text="{d:Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <ScrollViewer Grid.Row="1" Padding="12,0,12,12"
+                                      VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{d:Binding Rows}"
+                                          ItemTemplate="{StaticResource ContainerRowTemplate}" />
+                        </ScrollViewer>
+                        <StackPanel Grid.Row="2" Padding="14,10" Spacing="6">
+                            <Border Height="1" Background="{StaticResource HairlineBrush}" />
+                            <Button Content="Prune stopped containers"
+                                    HorizontalAlignment="Stretch"
+                                    Style="{StaticResource SmallButtonStyle}"
+                                    Foreground="{StaticResource AccentBrush}"
+                                    Command="{d:Binding PruneCommand}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- The detail pane -->
+                <Grid Grid.Column="1" DataContext="{d:Binding Detail}">
+                    <TextBlock Text="Select a container on the left."
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               FontSize="14"
+                               Foreground="{StaticResource TextTertiaryBrush}"
+                               Visibility="{d:Binding NoSelectionVisibility}" />
+
+                    <Grid Visibility="{d:Binding HasSelectionVisibility}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Title and toolbar -->
+                        <Border Grid.Row="0" Padding="24,14,24,12" BorderThickness="0,0,0,1"
+                                BorderBrush="{StaticResource HairlineBrush}">
+                            <StackPanel Spacing="10">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="{d:Binding Title}" FontSize="17"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{d:Binding Subtitle}" FontSize="11"
+                                                   FontFamily="{StaticResource RobotoMonoFont}"
+                                                   Foreground="{StaticResource TextTertiaryBrush}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                Spacing="8" VerticalAlignment="Center">
+                                        <Border Width="8" Height="8" CornerRadius="4"
+                                                VerticalAlignment="Center"
+                                                Background="{d:Binding StateBrush}" />
+                                        <TextBlock Text="{d:Binding StateText}" FontSize="11.5"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <c:WrapPanel Orientation="Horizontal">
+                                    <Button Content="Start" Margin="0,0,7,5"
+                                            Style="{StaticResource SmallButtonStyle}"
+                                            Command="{d:Binding StartCommand}" />
+                                    <Button Content="Stop" Margin="0,0,7,5"
+                                            Style="{StaticResource SmallButtonStyle}"
+                                            Command="{d:Binding StopCommand}" />
+                                    <Button Content="Restart" Margin="0,0,7,5"
+                                            Style="{StaticResource SmallButtonStyle}"
+                                            Command="{d:Binding RestartCommand}" />
+                                    <ComboBox Width="118" Margin="0,0,4,5" CornerRadius="6"
+                                              VerticalAlignment="Center"
+                                              ItemsSource="{d:Binding KillSignals}"
+                                              SelectedItem="{d:Binding KillSignal, Mode=TwoWay}" />
+                                    <Button Content="Kill" Margin="0,0,7,5"
+                                            Style="{StaticResource SmallButtonStyle}"
+                                            Command="{d:Binding KillCommand}" />
+                                    <Button Content="Console" Margin="0,0,7,5"
+                                            Style="{StaticResource SmallButtonStyle}"
+                                            Command="{d:Binding ConsoleCommand}" />
+                                    <Button Content="Copy id" Margin="0,0,7,5"
+                                            Style="{StaticResource SmallButtonStyle}"
+                                            Command="{d:Binding CopyIdCommand}" />
+                                    <Button Content="Remove" Margin="0,0,0,5"
+                                            Style="{StaticResource SmallButtonStyle}"
+                                            Foreground="{StaticResource AccentBrush}"
+                                            Command="{d:Binding RemoveCommand}" />
+                                </c:WrapPanel>
+
+                                <TextBlock Text="{d:Binding ErrorText}" FontSize="11.5"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource AccentBrush}"
+                                           Visibility="{d:Binding ErrorVisibility}" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Tab strip: five buttons, each with its own accent underline -->
+                        <Border Grid.Row="1" Padding="24,0" BorderThickness="0,0,0,1"
+                                BorderBrush="{StaticResource HairlineBrush}">
+                            <StackPanel Orientation="Horizontal">
+                                <StackPanel>
+                                    <Button Content="Overview" BorderThickness="0"
+                                            Background="Transparent" Padding="12,10"
+                                            CommandParameter="Overview"
+                                            Command="{d:Binding SelectTabCommand}" />
+                                    <Border Height="2"
+                                            Background="{d:Binding OverviewTabBrush}" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <Button Content="Logs" BorderThickness="0"
+                                            Background="Transparent" Padding="12,10"
+                                            CommandParameter="Logs"
+                                            Command="{d:Binding SelectTabCommand}" />
+                                    <Border Height="2" Background="{d:Binding LogsTabBrush}" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <Button Content="Stats" BorderThickness="0"
+                                            Background="Transparent" Padding="12,10"
+                                            CommandParameter="Stats"
+                                            Command="{d:Binding SelectTabCommand}" />
+                                    <Border Height="2" Background="{d:Binding StatsTabBrush}" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <Button Content="Diagnostics" BorderThickness="0"
+                                            Background="Transparent" Padding="12,10"
+                                            CommandParameter="Diagnostics"
+                                            Command="{d:Binding SelectTabCommand}" />
+                                    <Border Height="2"
+                                            Background="{d:Binding DiagnosticsTabBrush}" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <Button Content="Advisor" BorderThickness="0"
+                                            Background="Transparent" Padding="12,10"
+                                            CommandParameter="Advisor"
+                                            Command="{d:Binding SelectTabCommand}" />
+                                    <Border Height="2" Background="{d:Binding AdvisorTabBrush}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Tab bodies -->
+                        <Grid Grid.Row="2">
+
+                            <!-- Overview -->
+                            <ScrollViewer Padding="24,18" VerticalScrollBarVisibility="Auto"
+                                          Visibility="{d:Binding OverviewVisibility}">
+                                <StackPanel Spacing="16" MaxWidth="900" HorizontalAlignment="Left">
+                                    <Border Padding="18,14" CornerRadius="12" BorderThickness="1"
+                                            Background="{StaticResource CardBrush}"
+                                            BorderBrush="{StaticResource HairlineBrush}">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="CONTAINER" FontSize="10"
+                                                       FontWeight="SemiBold" CharacterSpacing="80"
+                                                       Foreground="{StaticResource AccentBrush}" />
+                                            <ItemsControl ItemsSource="{d:Binding OverviewFacts}"
+                                                          ItemTemplate="{StaticResource FactRowTemplate}" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Padding="18,14" CornerRadius="12" BorderThickness="1"
+                                            Background="{StaticResource CardBrush}"
+                                            BorderBrush="{StaticResource HairlineBrush}">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="NETWORKS" FontSize="10"
+                                                       FontWeight="SemiBold" CharacterSpacing="80"
+                                                       Foreground="{StaticResource AccentBrush}" />
+                                            <ItemsControl ItemsSource="{d:Binding NetworkFacts}"
+                                                          ItemTemplate="{StaticResource FactRowTemplate}" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Padding="18,14" CornerRadius="12" BorderThickness="1"
+                                            Background="{StaticResource CardBrush}"
+                                            BorderBrush="{StaticResource HairlineBrush}">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="MOUNTS" FontSize="10"
+                                                       FontWeight="SemiBold" CharacterSpacing="80"
+                                                       Foreground="{StaticResource AccentBrush}" />
+                                            <ItemsControl ItemsSource="{d:Binding MountFacts}"
+                                                          ItemTemplate="{StaticResource FactRowTemplate}" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Padding="18,14" CornerRadius="12" BorderThickness="1"
+                                            Background="{StaticResource CardBrush}"
+                                            BorderBrush="{StaticResource HairlineBrush}">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="LIMITS" FontSize="10"
+                                                       FontWeight="SemiBold" CharacterSpacing="80"
+                                                       Foreground="{StaticResource AccentBrush}" />
+                                            <ItemsControl ItemsSource="{d:Binding LimitFacts}"
+                                                          ItemTemplate="{StaticResource FactRowTemplate}" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Padding="18,14" CornerRadius="12" BorderThickness="1"
+                                            Background="{StaticResource CardBrush}"
+                                            BorderBrush="{StaticResource HairlineBrush}">
+                                        <StackPanel Spacing="8">
+                                            <Button Content="{d:Binding EnvironmentToggleText}"
+                                                    HorizontalAlignment="Left"
+                                                    Style="{StaticResource SmallButtonStyle}"
+                                                    Command="{d:Binding ToggleEnvironmentCommand}" />
+                                            <ItemsControl ItemsSource="{d:Binding EnvironmentLines}"
+                                                          ItemTemplate="{StaticResource MonoLineTemplate}"
+                                                          Visibility="{d:Binding EnvironmentVisibility}" />
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <!-- Logs -->
+                            <Grid Visibility="{d:Binding LogsVisibility}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <c:WrapPanel Grid.Row="0" Orientation="Horizontal"
+                                             Margin="24,14,24,8">
+                                    <ComboBox Width="140" Margin="0,0,10,6" CornerRadius="8"
+                                              VerticalAlignment="Center"
+                                              ItemsSource="{d:Binding LogTailOptions}"
+                                              SelectedItem="{d:Binding LogTail, Mode=TwoWay}" />
+                                    <ToggleSwitch Header="" OnContent="Timestamps"
+                                                  OffContent="Timestamps" Margin="0,0,10,6"
+                                                  VerticalAlignment="Center"
+                                                  IsOn="{d:Binding LogTimestamps, Mode=TwoWay}" />
+                                    <ToggleSwitch Header="" OnContent="Polling every 2 s"
+                                                  OffContent="Auto refresh" Margin="0,0,10,6"
+                                                  VerticalAlignment="Center"
+                                                  IsOn="{d:Binding LogAutoRefresh, Mode=TwoWay}" />
+                                    <Button Content="Refresh now" Margin="0,0,10,6"
+                                            VerticalAlignment="Center"
+                                            Style="{StaticResource SmallButtonStyle}"
+                                            Command="{d:Binding RefreshLogsCommand}" />
+                                    <Button Content="Copy" Margin="0,0,10,6"
+                                            VerticalAlignment="Center"
+                                            Style="{StaticResource SmallButtonStyle}"
+                                            Command="{d:Binding CopyLogsCommand}" />
+                                    <TextBlock Text="The daemon offers no follow API here, so this polls."
+                                               FontSize="10.5" VerticalAlignment="Center"
+                                               Margin="0,0,0,6"
+                                               Foreground="{StaticResource TextTertiaryBrush}" />
+                                </c:WrapPanel>
+                                <Border Grid.Row="1" Margin="24,0,24,20" CornerRadius="10"
+                                        BorderThickness="1"
+                                        Background="{StaticResource CardWellBrush}"
+                                        BorderBrush="{StaticResource HairlineBrush}">
+                                    <ScrollViewer Padding="14,10"
+                                                  HorizontalScrollBarVisibility="Auto"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <TextBlock Text="{d:Binding LogText}" FontSize="11.5"
+                                                   FontFamily="{StaticResource RobotoMonoFont}"
+                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                   TextWrapping="NoWrap" />
+                                    </ScrollViewer>
+                                </Border>
+                            </Grid>
+
+                            <!-- Stats -->
+                            <ScrollViewer Padding="24,18" VerticalScrollBarVisibility="Auto"
+                                          Visibility="{d:Binding StatsVisibility}">
+                                <StackPanel Spacing="16" MaxWidth="900" HorizontalAlignment="Left">
+                                    <Border Padding="18,14" CornerRadius="12" BorderThickness="1"
+                                            Background="{StaticResource CardBrush}"
+                                            BorderBrush="{StaticResource HairlineBrush}">
+                                        <StackPanel Spacing="12">
+                                            <StackPanel Spacing="5">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="CPU" FontSize="10"
+                                                               FontWeight="SemiBold"
+                                                               CharacterSpacing="80"
+                                                               Foreground="{StaticResource AccentBrush}" />
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{d:Binding CpuText}"
+                                                               FontSize="12" TextAlignment="Right"
+                                                               FontFamily="{StaticResource RobotoMonoFont}"
+                                                               Foreground="{StaticResource TextPrimaryBrush}" />
+                                                </Grid>
+                                                <ProgressBar Height="6" Minimum="0" Maximum="100"
+                                                             Value="{d:Binding CpuPercent}"
+                                                             Foreground="{StaticResource AccentBrush}"
+                                                             Background="#262B34" />
+                                            </StackPanel>
+                                            <StackPanel Spacing="5">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="MEMORY" FontSize="10"
+                                                               FontWeight="SemiBold"
+                                                               CharacterSpacing="80"
+                                                               Foreground="{StaticResource AccentBrush}" />
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{d:Binding MemoryText}"
+                                                               FontSize="12" TextAlignment="Right"
+                                                               FontFamily="{StaticResource RobotoMonoFont}"
+                                                               Foreground="{StaticResource TextPrimaryBrush}" />
+                                                </Grid>
+                                                <ProgressBar Height="6" Minimum="0" Maximum="100"
+                                                             Value="{d:Binding MemoryPercent}"
+                                                             Foreground="{StaticResource AccentBrush}"
+                                                             Background="#262B34" />
+                                            </StackPanel>
+                                            <StackPanel Spacing="5">
+                                                <TextBlock Text="CPU, LAST 60 SAMPLES"
+                                                           FontSize="10" FontWeight="SemiBold"
+                                                           CharacterSpacing="80"
+                                                           Foreground="{StaticResource AccentBrush}" />
+                                                <Border Height="64" CornerRadius="8" Padding="6,4"
+                                                        Background="{StaticResource CardWellBrush}">
+                                                    <ItemsControl ItemsSource="{d:Binding CpuHistory}"
+                                                                  ItemTemplate="{StaticResource SparkBarTemplate}"
+                                                                  VerticalAlignment="Bottom">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ui:ItemsPanelTemplate>
+                                                                <c:StackPanel Orientation="Horizontal"
+                                                                              VerticalAlignment="Bottom" />
+                                                            </ui:ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                    </ItemsControl>
+                                                </Border>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Padding="18,14" CornerRadius="12" BorderThickness="1"
+                                            Background="{StaticResource CardBrush}"
+                                            BorderBrush="{StaticResource HairlineBrush}">
+                                        <ItemsControl ItemsSource="{d:Binding StatFacts}"
+                                                      ItemTemplate="{StaticResource FactRowTemplate}" />
+                                    </Border>
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <!-- Diagnostics -->
+                            <ScrollViewer Padding="24,18" VerticalScrollBarVisibility="Auto"
+                                          Visibility="{d:Binding DiagnosticsTabVisibility}">
+                                <StackPanel Spacing="12">
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{d:Binding DiagnosticsSummary}"
+                                                   FontSize="13" TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                                        <Button Grid.Column="1" Content="Wait for healthy"
+                                                VerticalAlignment="Center"
+                                                Style="{StaticResource SmallButtonStyle}"
+                                                Command="{d:Binding WaitHealthyCommand}" />
+                                    </Grid>
+                                    <ItemsControl ItemsSource="{d:Binding DiagnosticCards}"
+                                                  ItemTemplate="{StaticResource DiagnosticCardTemplate}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ui:ItemsPanelTemplate>
+                                                <c:WrapPanel Orientation="Horizontal" />
+                                            </ui:ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <!-- Advisor -->
+                            <ScrollViewer Padding="24,18" VerticalScrollBarVisibility="Auto"
+                                          Visibility="{d:Binding AdvisorVisibility}">
+                                <StackPanel Spacing="10" MaxWidth="900" HorizontalAlignment="Left">
+                                    <TextBlock Text="The advisor has nothing to say about this container."
+                                               FontSize="12.5" TextWrapping="Wrap"
+                                               Foreground="{StaticResource TextTertiaryBrush}"
+                                               Visibility="{d:Binding NoFindingsVisibility}" />
+                                    <ItemsControl ItemsSource="{d:Binding Findings}"
+                                                  ItemTemplate="{StaticResource AdvisorFindingTemplate}" />
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Grid>
+
+            <!-- ───────────── 5. CONSOLES ───────────── -->
+            <Grid Visibility="{d:Binding DataContext.ConsolesVisibility, ElementName=RootGrid}"
+                  DataContext="{d:Binding Consoles}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Padding="24,14" BorderThickness="0,0,0,1"
+                        BorderBrush="{StaticResource HairlineBrush}">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="1">
+                            <TextBlock Text="Consoles" FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}" />
+                            <TextBlock Text="A real shell inside a running container. The shell is found by trying each candidate and reading the exit code."
+                                       FontSize="11" TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextTertiaryBrush}" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="Open a console"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                Command="{d:Binding OpenPickerCommand}" />
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="1">
+                    <Grid Visibility="{d:Binding TabsVisibility}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <!-- The tab strip only. Each tab's body lives in the star row below, so
+                             the TerminalControl sits in a real bounded cell: a tab's own content
+                             presenter measures against an unbounded height, which leaves a star
+                             row inside it collapsed and the terminal a few rows tall. Bodies are
+                             built in code-behind because TerminalControl declares no dependency
+                             properties and so cannot live in a DataTemplate. -->
+                        <TabView x:Name="ConsoleTabs" Grid.Row="0" VerticalAlignment="Top"
+                                 IsAddTabButtonVisible="False"
+                                 TabCloseRequested="ConsoleTabs_TabCloseRequested"
+                                 SelectionChanged="ConsoleTabs_SelectionChanged" />
+                        <Grid x:Name="ConsoleBodyHost" Grid.Row="1" />
+                    </Grid>
+
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Spacing="14" MaxWidth="480"
+                                Visibility="{d:Binding EmptyVisibility}">
+                        <TextBlock Text="No consoles are open." FontSize="15"
+                                   TextAlignment="Center"
+                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                        <TextBlock Text="Open one on any running container — from here, from a container's toolbar, or from a Redis instance card."
+                                   FontSize="12" TextAlignment="Center" TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextTertiaryBrush}" />
+                        <Button Content="Open a console" HorizontalAlignment="Center"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                Command="{d:Binding OpenPickerCommand}" />
+                    </StackPanel>
+
+                    <!-- The container picker, as an in-section overlay -->
+                    <Grid Background="#CC0E1114" Visibility="{d:Binding PickerVisibility}">
+                        <Border Width="520" MaxHeight="480" CornerRadius="14" BorderThickness="1"
+                                Padding="20,18" VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Background="{StaticResource CardBrush}"
+                                BorderBrush="{StaticResource HairlineBrush}">
+                            <Grid RowSpacing="12">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="Open a console in…" FontSize="15"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimaryBrush}" />
+                                <TextBox Grid.Row="1" CornerRadius="8"
+                                         PlaceholderText="Filter running containers…"
+                                         Text="{d:Binding PickerSearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{d:Binding PickerRows}"
+                                                  ItemTemplate="{StaticResource ContainerRowTemplate}" />
+                                </ScrollViewer>
+                                <Button Grid.Row="3" Content="Cancel" HorizontalAlignment="Right"
+                                        Style="{StaticResource SmallButtonStyle}"
+                                        Command="{d:Binding ClosePickerCommand}" />
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Grid>
+
+            <!-- ───────────── 6. IMAGES ───────────── -->
+            <Grid Visibility="{d:Binding DataContext.ImagesVisibility, ElementName=RootGrid}"
+                  DataContext="{d:Binding Images}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="372" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" BorderThickness="0,0,1,0"
+                        BorderBrush="{StaticResource HairlineBrush}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Padding="18,15,18,10" Spacing="8">
+                            <StackPanel Spacing="1">
+                                <TextBlock Text="Images" FontSize="15" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimaryBrush}" />
+                                <TextBlock Text="{d:Binding CountText}" FontSize="11"
+                                           Foreground="{StaticResource TextTertiaryBrush}" />
+                            </StackPanel>
+                            <TextBox CornerRadius="8" PlaceholderText="Search images…"
+                                     Text="{d:Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <ScrollViewer Grid.Row="1" Padding="12,0,12,12"
+                                      VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{d:Binding Rows}"
+                                          ItemTemplate="{StaticResource ImageRowTemplate}" />
+                        </ScrollViewer>
+                        <StackPanel Grid.Row="2" Padding="14,10" Spacing="7">
+                            <Border Height="1" Background="{StaticResource HairlineBrush}" />
+                            <TextBox CornerRadius="8" PlaceholderText="redis:8-alpine"
+                                     Text="{d:Binding PullReference, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            <Button Content="Pull image" HorizontalAlignment="Stretch"
+                                    Style="{StaticResource SmallButtonStyle}"
+                                    Command="{d:Binding PullCommand}" />
+                            <Button Content="Prune dangling images" HorizontalAlignment="Stretch"
+                                    Style="{StaticResource SmallButtonStyle}"
+                                    Foreground="{StaticResource AccentBrush}"
+                                    Command="{d:Binding PruneCommand}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Column="1">
+                    <TextBlock Text="Select an image on the left."
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               FontSize="14"
+                               Foreground="{StaticResource TextTertiaryBrush}"
+                               Visibility="{d:Binding NoSelectionVisibility}" />
+
+                    <ScrollViewer Padding="24,18" VerticalScrollBarVisibility="Auto"
+                                  Visibility="{d:Binding HasSelectionVisibility}">
+                        <StackPanel Spacing="16" MaxWidth="920" HorizontalAlignment="Left">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="{d:Binding Title}" FontSize="18"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{d:Binding Subtitle}" FontSize="11"
+                                           FontFamily="{StaticResource RobotoMonoFont}"
+                                           Foreground="{StaticResource TextTertiaryBrush}" />
+                            </StackPanel>
+
+                            <c:WrapPanel Orientation="Horizontal">
+                                <TextBox Width="220" Margin="0,0,8,6" CornerRadius="8"
+                                         VerticalAlignment="Center"
+                                         PlaceholderText="new tag, e.g. myredis:latest"
+                                         Text="{d:Binding NewTag, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Content="Tag" Margin="0,0,8,6" VerticalAlignment="Center"
+                                        Style="{StaticResource SmallButtonStyle}"
+                                        Command="{d:Binding TagCommand}" />
+                                <Button Content="Scan (Trivy)" Margin="0,0,8,6"
+                                        VerticalAlignment="Center"
+                                        Style="{StaticResource SmallButtonStyle}"
+                                        Command="{d:Binding ScanCommand}" />
+                                <Button Content="Efficiency (Dive)" Margin="0,0,8,6"
+                                        VerticalAlignment="Center"
+                                        Style="{StaticResource SmallButtonStyle}"
+                                        Command="{d:Binding EfficiencyCommand}" />
+                                <Button Content="Remove" Margin="0,0,0,6"
+                                        VerticalAlignment="Center"
+                                        Style="{StaticResource SmallButtonStyle}"
+                                        Foreground="{StaticResource AccentBrush}"
+                                        Command="{d:Binding RemoveCommand}" />
+                            </c:WrapPanel>
+
+                            <Border Padding="16,13" CornerRadius="12" BorderThickness="1"
+                                    Background="{StaticResource CardWellBrush}"
+                                    BorderBrush="{StaticResource HairlineBrush}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="LINT A DOCKERFILE" FontSize="10"
+                                               FontWeight="SemiBold" CharacterSpacing="80"
+                                               Foreground="{StaticResource AccentBrush}" />
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox CornerRadius="8"
+                                                 PlaceholderText="/path/to/Dockerfile"
+                                                 Text="{d:Binding DockerfilePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        <Button Grid.Column="1" Content="Lint (Hadolint)"
+                                                Style="{StaticResource SmallButtonStyle}"
+                                                Command="{d:Binding LintCommand}" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Padding="16,13" CornerRadius="12" BorderThickness="1"
+                                    Background="{StaticResource CardBrush}"
+                                    BorderBrush="{StaticResource HairlineBrush}"
+                                    Visibility="{d:Binding ToolOutputVisibility}">
+                                <StackPanel Spacing="8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{d:Binding ToolHeading}" FontSize="12.5"
+                                                   TextWrapping="Wrap" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                                        <Button Grid.Column="1" Content="Clear"
+                                                Style="{StaticResource SmallButtonStyle}"
+                                                Command="{d:Binding ClearOutputCommand}" />
+                                    </Grid>
+                                    <ItemsControl ItemsSource="{d:Binding ToolOutput}"
+                                                  ItemTemplate="{StaticResource MonoLineTemplate}" />
+                                    <ItemsControl ItemsSource="{d:Binding Vulnerabilities}"
+                                                  ItemTemplate="{StaticResource VulnerabilityTemplate}"
+                                                  Visibility="{d:Binding VulnerabilitiesVisibility}" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Padding="18,14" CornerRadius="12" BorderThickness="1"
+                                    Background="{StaticResource CardBrush}"
+                                    BorderBrush="{StaticResource HairlineBrush}">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="IMAGE" FontSize="10" FontWeight="SemiBold"
+                                               CharacterSpacing="80"
+                                               Foreground="{StaticResource AccentBrush}" />
+                                    <ItemsControl ItemsSource="{d:Binding OverviewFacts}"
+                                                  ItemTemplate="{StaticResource FactRowTemplate}" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Padding="18,14" CornerRadius="12" BorderThickness="1"
+                                    Background="{StaticResource CardBrush}"
+                                    BorderBrush="{StaticResource HairlineBrush}">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="LAYERS" FontSize="10" FontWeight="SemiBold"
+                                               CharacterSpacing="80"
+                                               Foreground="{StaticResource AccentBrush}" />
+                                    <ItemsControl ItemsSource="{d:Binding Layers}"
+                                                  ItemTemplate="{StaticResource FactRowTemplate}" />
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Text="{d:Binding ErrorText}" FontSize="11.5"
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource AccentBrush}"
+                                       Visibility="{d:Binding ErrorVisibility}" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Grid>
+
+            <!-- ───────────── 7. NETWORKS AND VOLUMES ───────────── -->
+            <Grid Visibility="{d:Binding DataContext.NetworksVolumesVisibility, ElementName=RootGrid}"
+                  DataContext="{d:Binding NetworksVolumes}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Padding="24,14" BorderThickness="0,0,0,1"
+                        BorderBrush="{StaticResource HairlineBrush}">
+                    <StackPanel Spacing="1">
+                        <TextBlock Text="Networks and volumes" FontSize="16" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimaryBrush}" />
+                        <TextBlock Text="{d:Binding CountText}" FontSize="11"
+                                   Foreground="{StaticResource TextTertiaryBrush}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Networks -->
+                <Grid Grid.Row="1" Padding="24,14,24,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="360" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <c:WrapPanel Grid.Row="0" Grid.ColumnSpan="2" Orientation="Horizontal"
+                                 Margin="0,0,0,8">
+                        <TextBlock Text="NETWORKS" FontSize="10" FontWeight="SemiBold"
+                                   CharacterSpacing="80" VerticalAlignment="Center"
+                                   Margin="0,0,16,6"
+                                   Foreground="{StaticResource AccentBrush}" />
+                        <TextBox Width="200" Margin="0,0,8,6" CornerRadius="8"
+                                 VerticalAlignment="Center" PlaceholderText="new network name"
+                                 Text="{d:Binding NewNetworkName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Content="Create" Margin="0,0,8,6" VerticalAlignment="Center"
+                                Style="{StaticResource SmallButtonStyle}"
+                                Command="{d:Binding CreateNetworkCommand}" />
+                        <Button Content="Remove selected" Margin="0,0,8,6"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource SmallButtonStyle}"
+                                Foreground="{StaticResource AccentBrush}"
+                                Command="{d:Binding RemoveNetworkCommand}" />
+                        <Button Content="Prune unused" Margin="0,0,0,6"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource SmallButtonStyle}"
+                                Foreground="{StaticResource AccentBrush}"
+                                Command="{d:Binding PruneNetworksCommand}" />
+                    </c:WrapPanel>
+
+                    <ScrollViewer Grid.Row="1" Grid.Column="0" Margin="0,0,16,0"
+                                  VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{d:Binding Networks}"
+                                      ItemTemplate="{StaticResource NetworkRowTemplate}" />
+                    </ScrollViewer>
+                    <Border Grid.Row="1" Grid.Column="1" Padding="16,13" CornerRadius="12"
+                            BorderThickness="1" VerticalAlignment="Top"
+                            Background="{StaticResource CardBrush}"
+                            BorderBrush="{StaticResource HairlineBrush}">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="{d:Binding NetworkTitle}" FontSize="13"
+                                       FontWeight="SemiBold" TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextPrimaryBrush}" />
+                            <ItemsControl ItemsSource="{d:Binding NetworkDetail}"
+                                          ItemTemplate="{StaticResource FactRowTemplate}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Volumes -->
+                <Grid Grid.Row="2" Padding="24,8,24,20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="360" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <c:WrapPanel Grid.Row="0" Grid.ColumnSpan="2" Orientation="Horizontal"
+                                 Margin="0,0,0,8">
+                        <TextBlock Text="VOLUMES" FontSize="10" FontWeight="SemiBold"
+                                   CharacterSpacing="80" VerticalAlignment="Center"
+                                   Margin="0,0,16,6"
+                                   Foreground="{StaticResource AccentBrush}" />
+                        <TextBox Width="200" Margin="0,0,8,6" CornerRadius="8"
+                                 VerticalAlignment="Center" PlaceholderText="new volume name"
+                                 Text="{d:Binding NewVolumeName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Content="Create" Margin="0,0,8,6" VerticalAlignment="Center"
+                                Style="{StaticResource SmallButtonStyle}"
+                                Command="{d:Binding CreateVolumeCommand}" />
+                        <Button Content="Remove selected" Margin="0,0,8,6"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource SmallButtonStyle}"
+                                Foreground="{StaticResource AccentBrush}"
+                                Command="{d:Binding RemoveVolumeCommand}" />
+                        <Button Content="Prune unused" Margin="0,0,0,6"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource SmallButtonStyle}"
+                                Foreground="{StaticResource AccentBrush}"
+                                Command="{d:Binding PruneVolumesCommand}" />
+                    </c:WrapPanel>
+
+                    <ScrollViewer Grid.Row="1" Grid.Column="0" Margin="0,0,16,0"
+                                  VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{d:Binding Volumes}"
+                                      ItemTemplate="{StaticResource VolumeRowTemplate}" />
+                    </ScrollViewer>
+                    <Border Grid.Row="1" Grid.Column="1" Padding="16,13" CornerRadius="12"
+                            BorderThickness="1" VerticalAlignment="Top"
+                            Background="{StaticResource CardBrush}"
+                            BorderBrush="{StaticResource HairlineBrush}">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="{d:Binding VolumeTitle}" FontSize="13"
+                                       FontWeight="SemiBold" TextWrapping="Wrap"
+                                       FontFamily="{StaticResource RobotoMonoFont}"
+                                       Foreground="{StaticResource TextPrimaryBrush}" />
+                            <ItemsControl ItemsSource="{d:Binding VolumeDetail}"
+                                          ItemTemplate="{StaticResource FactRowTemplate}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Grid>
+
+            <!-- ───────────── 8. SYSTEM ───────────── -->
+            <Grid Visibility="{d:Binding DataContext.SystemVisibility, ElementName=RootGrid}"
+                  DataContext="{d:Binding System}">
+                <ScrollViewer Padding="24,20,24,24" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="16" MaxWidth="1180" HorizontalAlignment="Left">
+
+                        <StackPanel Spacing="1">
+                            <TextBlock Text="System" FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}" />
+                            <TextBlock Text="The daemon itself, what its storage is holding, what is happening on it, and what the advisor makes of it."
+                                       FontSize="11" TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextTertiaryBrush}" />
+                        </StackPanel>
+
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Padding="18,15" CornerRadius="12"
+                                    BorderThickness="1" VerticalAlignment="Top"
+                                    Background="{StaticResource CardBrush}"
+                                    BorderBrush="{StaticResource HairlineBrush}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="DAEMON" FontSize="11" FontWeight="SemiBold"
+                                               CharacterSpacing="80"
+                                               Foreground="{StaticResource AccentBrush}" />
+                                    <ItemsControl ItemsSource="{d:Binding DaemonFacts}"
+                                                  ItemTemplate="{StaticResource FactRowTemplate}" />
+                                </StackPanel>
+                            </Border>
+
+                            <StackPanel Grid.Column="1" Spacing="16">
+                                <Border Padding="18,15" CornerRadius="12" BorderThickness="1"
+                                        Background="{StaticResource CardBrush}"
+                                        BorderBrush="{StaticResource HairlineBrush}">
+                                    <StackPanel Spacing="10">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="DISK USAGE" FontSize="11"
+                                                       FontWeight="SemiBold" CharacterSpacing="80"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{StaticResource AccentBrush}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{d:Binding TotalDiskText}"
+                                                       FontSize="13" FontWeight="SemiBold"
+                                                       FontFamily="{StaticResource RobotoMonoFont}"
+                                                       Foreground="{StaticResource TextPrimaryBrush}" />
+                                        </Grid>
+                                        <ItemsControl ItemsSource="{d:Binding DiskRows}"
+                                                      ItemTemplate="{StaticResource DiskRowTemplate}" />
+                                        <c:WrapPanel Orientation="Horizontal">
+                                            <Button Content="Prune containers" Margin="0,0,7,6"
+                                                    Style="{StaticResource SmallButtonStyle}"
+                                                    Foreground="{StaticResource AccentBrush}"
+                                                    Command="{d:Binding PruneContainersCommand}" />
+                                            <Button Content="Prune images" Margin="0,0,7,6"
+                                                    Style="{StaticResource SmallButtonStyle}"
+                                                    Foreground="{StaticResource AccentBrush}"
+                                                    Command="{d:Binding PruneImagesCommand}" />
+                                            <Button Content="Prune networks" Margin="0,0,7,6"
+                                                    Style="{StaticResource SmallButtonStyle}"
+                                                    Foreground="{StaticResource AccentBrush}"
+                                                    Command="{d:Binding PruneNetworksCommand}" />
+                                            <Button Content="Prune volumes" Margin="0,0,0,6"
+                                                    Style="{StaticResource SmallButtonStyle}"
+                                                    Foreground="{StaticResource AccentBrush}"
+                                                    Command="{d:Binding PruneVolumesCommand}" />
+                                        </c:WrapPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Padding="18,15" CornerRadius="12" BorderThickness="1"
+                                        Background="{StaticResource CardWellBrush}"
+                                        BorderBrush="{StaticResource AccentDimBrush}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Text="SWEEP" FontSize="11" FontWeight="SemiBold"
+                                                   CharacterSpacing="80"
+                                                   Foreground="{StaticResource AccentBrush}" />
+                                        <TextBlock Text="Destroys every Redis instance this tool created — containers, volumes and networks. The sweep is scoped to this tool's own labels, so nothing else on the daemon is touched. You are shown the list before anything happens."
+                                                   FontSize="11.5" TextWrapping="Wrap"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                                        <Button Content="Sweep RedisSetupTool resources"
+                                                HorizontalAlignment="Left"
+                                                Style="{StaticResource PrimaryButtonStyle}"
+                                                Command="{d:Binding SweepCommand}" />
+                                        <TextBlock Text="{d:Binding ErrorText}" FontSize="11.5"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{StaticResource AccentBrush}"
+                                                   Visibility="{d:Binding ErrorVisibility}" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Padding="18,15" CornerRadius="12"
+                                    BorderThickness="1" VerticalAlignment="Top"
+                                    Background="{StaticResource CardBrush}"
+                                    BorderBrush="{StaticResource HairlineBrush}">
+                                <StackPanel Spacing="10">
+                                    <c:WrapPanel Orientation="Horizontal">
+                                        <TextBlock Text="EVENTS" FontSize="11" FontWeight="SemiBold"
+                                                   CharacterSpacing="80" VerticalAlignment="Center"
+                                                   Margin="0,0,14,6"
+                                                   Foreground="{StaticResource AccentBrush}" />
+                                        <ComboBox Width="130" Margin="0,0,8,6" CornerRadius="8"
+                                                  VerticalAlignment="Center"
+                                                  ItemsSource="{d:Binding EventFilterOptions}"
+                                                  SelectedItem="{d:Binding EventFilter, Mode=TwoWay}" />
+                                        <Button Content="{d:Binding PauseButtonText}"
+                                                Margin="0,0,8,6" VerticalAlignment="Center"
+                                                Style="{StaticResource SmallButtonStyle}"
+                                                Command="{d:Binding TogglePauseCommand}" />
+                                        <Button Content="Clear" Margin="0,0,0,6"
+                                                VerticalAlignment="Center"
+                                                Style="{StaticResource SmallButtonStyle}"
+                                                Command="{d:Binding ClearEventsCommand}" />
+                                    </c:WrapPanel>
+                                    <TextBlock Text="{d:Binding EventCountText}" FontSize="10.5"
+                                               Foreground="{StaticResource TextTertiaryBrush}" />
+                                    <ItemsControl ItemsSource="{d:Binding Events}"
+                                                  ItemTemplate="{StaticResource EventRowTemplate}" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="1" Padding="18,15" CornerRadius="12"
+                                    BorderThickness="1" VerticalAlignment="Top"
+                                    Background="{StaticResource CardBrush}"
+                                    BorderBrush="{StaticResource HairlineBrush}">
+                                <StackPanel Spacing="10">
+                                    <c:WrapPanel Orientation="Horizontal">
+                                        <TextBlock Text="ADVISOR" FontSize="11"
+                                                   FontWeight="SemiBold" CharacterSpacing="80"
+                                                   VerticalAlignment="Center" Margin="0,0,14,6"
+                                                   Foreground="{StaticResource AccentBrush}" />
+                                        <ComboBox Width="150" Margin="0,0,8,6" CornerRadius="8"
+                                                  VerticalAlignment="Center"
+                                                  ItemsSource="{d:Binding SeverityFilterOptions}"
+                                                  SelectedItem="{d:Binding SeverityFilter, Mode=TwoWay}" />
+                                        <TextBlock Text="{d:Binding FindingsCountText}"
+                                                   FontSize="10.5" VerticalAlignment="Center"
+                                                   Margin="0,0,0,6"
+                                                   Foreground="{StaticResource TextTertiaryBrush}" />
+                                    </c:WrapPanel>
+                                    <TextBlock Text="Nothing to report."
+                                               FontSize="11.5"
+                                               Foreground="{StaticResource TextTertiaryBrush}"
+                                               Visibility="{d:Binding NoFindingsVisibility}" />
+                                    <ItemsControl ItemsSource="{d:Binding Findings}"
+                                                  ItemTemplate="{StaticResource AdvisorFindingTemplate}" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+        </Grid>
+    </Grid>
+</Page>

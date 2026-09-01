@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- StackExchange.Redis - a deliberate, quarantined stopgap. This is the ONLY project in
+         the sample that references it, so swapping to CodeBrix.Redis later is a one-project change. -->
+    <PackageReference Include="StackExchange.Redis" Version="3.1.31" />
+    <!-- The DI registration extension method lives in this library, so it needs the abstractions -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />
+  </ItemGroup>
+</Project>

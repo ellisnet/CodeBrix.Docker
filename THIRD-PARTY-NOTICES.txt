@@ -25,9 +25,14 @@ Scope of incorporation:
   Unlike CodeBrix libraries that port an upstream project wholesale, only
   selected portions of Docker.DotNet were adapted into this repository under
   src/CodeBrix.Docker/. The adapted areas are:
-    - The Docker stdcopy stream-demultiplexing protocol handling
-      (upstream MultiplexedStream.cs), adapted as
+    - The Docker stdcopy stream-demultiplexing protocol handling, both the
+      buffered and the incremental frame-at-a-time forms (upstream
+      MultiplexedStream.cs), adapted as
       Containers/MultiplexedStreamReader.cs.
+    - The half-close contract used to signal end-of-standard-input on a
+      hijacked exec/attach connection (upstream
+      Microsoft.Net.Http.Client/WriteClosableStream.cs), adapted as
+      Transport/IWriteClosableStream.cs and Transport/HijackedStream.cs.
     - Docker Engine API wire-format model shapes (field names, types, and
       endpoint/query-string conventions from the upstream Models/ and
       Endpoints/ directories), consulted as reference for this library's
@@ -39,7 +44,10 @@ Modifications made during the adaptation (per CodeBrix family conventions):
   - Rewritten for .NET 10 idioms: the upstream Microsoft.Net.Http.Client
     custom HTTP stack was replaced with SocketsHttpHandler.ConnectCallback
     over NamedPipeClientStream (Windows) / UnixDomainSocketEndPoint
-    (Linux/macOS); no upstream transport code was retained.
+    (Linux/macOS). No upstream HTTP-stack code was retained; the hijacked
+    exec/attach connection writes its one HTTP request over that same
+    transport and keeps the socket, and only the write-closable stream
+    contract listed above is adapted from upstream.
   - JSON serialization was rewritten from Newtonsoft.Json to the in-box
     System.Text.Json; the library has zero NuGet dependencies.
   - All types were renamed into the flat CodeBrix.Docker namespace with an

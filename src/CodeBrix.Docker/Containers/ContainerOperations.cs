@@ -339,16 +339,141 @@ public sealed class ContainerOperations
             output = await MultiplexedStreamReader.ReadToEndAsync(stream, cancellationToken).ConfigureAwait(false);
         }
 
-        var inspect = await _api
-            .GetAsync<ExecInspectResponse>($"exec/{execId}/json", cancellationToken)
-            .ConfigureAwait(false);
+        var inspect = await InspectExecCoreAsync(_api, execId, cancellationToken).ConfigureAwait(false);
 
         return new ExecResult(output.Stdout, output.Stderr, inspect.ExitCode ?? 0);
     }
 
+    /// <summary>
+    /// Starts a command inside a running container and hands back its live streams, so that the
+    /// caller can read output as it appears and write to standard input as it goes.
+    /// </summary>
+    /// <param name="idOrName">The container id or name. The container must be running.</param>
+    /// <param name="spec">The exec specification.</param>
+    /// <param name="cancellationToken">A cancellation token covering the two setup calls.</param>
+    /// <returns>The live session. The caller owns it and must dispose it.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="spec"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The specification is incomplete.</exception>
+    /// <exception cref="DockerContainerNotFoundException">No such container exists.</exception>
+    /// <exception cref="DockerApiException">The container is not running.</exception>
+    /// <remarks>
+    /// <para>
+    /// This is the interactive counterpart of <see cref="ExecAsync"/>: the daemon upgrades the
+    /// connection away from HTTP and the two ends then speak the container's standard streams over
+    /// it. With <see cref="ExecSpec.Tty"/> set the daemon allocates a pseudo-terminal inside the
+    /// container, which is what produces a shell prompt, ANSI escape sequences and echoed input.
+    /// </para>
+    /// <para>
+    /// A command the daemon cannot start at all — a shell an image does not ship, for instance — does
+    /// not hang and does not throw here. The daemon upgrades the connection as usual and then writes
+    /// the container runtime's message onto the output stream ("<c>OCI runtime exec failed …</c>")
+    /// before closing it, and <see cref="InspectExecAsync"/> reports exit code 127. Probe for a shell
+    /// by running one and checking that exit code, rather than by assuming any particular image ships
+    /// <c>/bin/bash</c>.
+    /// </para>
+    /// </remarks>
+    public async Task<ContainerExecStream> ExecStreamAsync(string idOrName, ExecSpec spec,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        spec.Validate(nameof(spec));
+
+        var createRequest = new ExecCreateRequest
+        {
+            AttachStdin = spec.AttachStdin,
+            AttachStdout = spec.AttachStdout,
+            AttachStderr = spec.AttachStderr,
+            Tty = spec.Tty,
+            Cmd = spec.Command,
+            Env = spec.Env is { Count: > 0 } ? spec.Env.ToList() : null,
+            User = spec.User,
+            WorkingDir = spec.WorkingDir,
+            Privileged = spec.Privileged,
+        };
+
+        var created = await _api
+            .PostAsync<ExecCreateResponse>($"containers/{Reference(idOrName)}/exec", createRequest, cancellationToken)
+            .ConfigureAwait(false);
+
+        var execId = created.Id
+                     ?? throw new DockerException("The Docker daemon did not return an exec id.");
+
+        var startRequest = new ExecStartRequest
+        {
+            Detach = false,
+            Tty = spec.Tty,
+            ConsoleSize = spec.Tty && spec.ConsoleHeight.HasValue && spec.ConsoleWidth.HasValue
+                ? [spec.ConsoleHeight.Value, spec.ConsoleWidth.Value]
+                : null,
+        };
+
+        var transport = await _api
+            .PostForHijackedStreamAsync($"exec/{execId}/start", startRequest, cancellationToken)
+            .ConfigureAwait(false);
+
+        try
+        {
+            return new ContainerExecStream(_api, execId, transport, spec.Tty);
+        }
+        catch
+        {
+            await transport.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Tells the daemon that an exec session's terminal has been resized.
+    /// </summary>
+    /// <param name="execId">The exec instance's id, from <see cref="ContainerExecStream.ExecId"/>.</param>
+    /// <param name="height">The new height in rows. Must be greater than zero.</param>
+    /// <param name="width">The new width in columns. Must be greater than zero.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>A task that completes once the daemon has accepted the new size.</returns>
+    /// <exception cref="DockerContainerNotFoundException">No such exec instance exists.</exception>
+    /// <exception cref="DockerApiException">
+    /// The exec session has no terminal, or has already finished.
+    /// </exception>
+    public Task ResizeExecAsync(string execId, int height, int width,
+        CancellationToken cancellationToken = default) =>
+        ResizeExecCoreAsync(_api, execId, height, width, cancellationToken);
+
+    /// <summary>
+    /// Reads an exec instance's state, which is where a streaming session's exit code comes from.
+    /// </summary>
+    /// <param name="execId">The exec instance's id, from <see cref="ContainerExecStream.ExecId"/>.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The exec instance's state.</returns>
+    /// <exception cref="DockerContainerNotFoundException">No such exec instance exists.</exception>
+    public Task<ExecInspectResult> InspectExecAsync(string execId, CancellationToken cancellationToken = default) =>
+        InspectExecCoreAsync(_api, execId, cancellationToken);
+
     // ---------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------
+
+    /// <summary>Shared by this class and <see cref="ContainerExecStream.ResizeAsync"/>.</summary>
+    internal static Task ResizeExecCoreAsync(DockerApiClient api, string execId, int height, int width,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(execId);
+        ArgumentOutOfRangeException.ThrowIfLessThan(height, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(width, 1);
+
+        var query = new QueryStringBuilder()
+            .Add("h", (int?)height)
+            .Add("w", (int?)width);
+
+        return api.PostAsync(query.AppendTo($"exec/{Reference(execId)}/resize"), body: null, cancellationToken);
+    }
+
+    /// <summary>Shared by this class and <see cref="ContainerExecStream.InspectAsync"/>.</summary>
+    internal static Task<ExecInspectResult> InspectExecCoreAsync(DockerApiClient api, string execId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(execId);
+        return api.GetAsync<ExecInspectResult>($"exec/{Reference(execId)}/json", cancellationToken);
+    }
 
     private static string Reference(string idOrName)
     {

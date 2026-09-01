@@ -116,7 +116,7 @@ public sealed class NetworkTests(DockerTestFixture fixture)
             var inspectJoiner = await Client.Containers.InspectAsync(joinerId, cancellation.Token);
             Assert.False(inspectJoiner.NetworkSettings?.Networks?.ContainsKey(networkName) ?? false);
 
-            var lookup = await Client.Containers.ExecAsync(residentId, ["nslookup", "gamma"],
+            var lookup = await Client.Containers.ExecAsync(residentId, ["nslookup", Rooted("gamma")],
                 cancellationToken: cancellation.Token);
             Assert.DoesNotContain(joinerAddress, lookup.Stdout, StringComparison.Ordinal);
         }
@@ -164,11 +164,26 @@ public sealed class NetworkTests(DockerTestFixture fixture)
         return endpoint?.IpAddress ?? string.Empty;
     }
 
+    /// <summary>
+    /// Turns a container name or network alias into a rooted (fully qualified) DNS name, so that the
+    /// resolver inside the container does not expand it against the host's DNS search list.
+    /// </summary>
+    /// <remarks>
+    /// Docker copies the host's <c>search</c> line into every container's <c>/etc/resolv.conf</c>. On a
+    /// machine whose DNS advertises a search domain — a home router handing out <c>search lan</c>, or a
+    /// corporate suffix — busybox's <c>nslookup</c> applet queries only the expanded name
+    /// (<c>alpha.lan</c>) and never retries the bare label, so the lookup returns NXDOMAIN even though
+    /// Docker's embedded DNS resolves <c>alpha</c> perfectly well. Anchoring the name with a trailing dot
+    /// suppresses search-list expansion, which makes the probe measure Docker's DNS rather than the
+    /// configuration of whichever machine the suite happens to run on.
+    /// </remarks>
+    private static string Rooted(string hostname) => hostname + ".";
+
     private async Task AssertResolvesAsync(string fromContainerId, string hostname, string expectedAddress,
         CancellationToken cancellationToken)
     {
         var result = await Poll.UntilAsync(
-            token => Client.Containers.ExecAsync(fromContainerId, ["nslookup", hostname],
+            token => Client.Containers.ExecAsync(fromContainerId, ["nslookup", Rooted(hostname)],
                 cancellationToken: token),
             lookup => lookup.Stdout.Contains(expectedAddress, StringComparison.Ordinal),
             TimeSpan.FromSeconds(20), $"'{hostname}' to resolve to {expectedAddress}",

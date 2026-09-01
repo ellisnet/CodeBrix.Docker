@@ -85,6 +85,15 @@ internal sealed class DockerCliRunner
             startInfo.WorkingDirectory = workingDir;
         }
 
+        // The CLI must act on the same daemon as the rest of the client. Without this, a client built on
+        // an explicit endpoint — tcp://, or ssh:// to another host — would build and pull against
+        // whatever the local environment points at instead. When no endpoint was configured, the child
+        // inherits DOCKER_HOST and resolves it exactly as DockerEndpoint.Resolve does.
+        if (!string.IsNullOrWhiteSpace(_options.Endpoint))
+        {
+            startInfo.Environment["DOCKER_HOST"] = _options.Endpoint.Trim();
+        }
+
         using var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
 
         var stdout = new StringBuilder();
