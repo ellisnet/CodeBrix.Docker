@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
-using StackExchange.Redis;
+using CodeBrix.Redis;
 
 namespace RedisSetupTool.RedisManagement;
 

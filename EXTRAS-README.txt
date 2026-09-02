@@ -136,8 +136,10 @@ PROJECT LAYOUT
       src/libs/RedisSetupTool.RedisManagement/
           The Redis client concerns -- connect, ping, exercise, health probes,
           Redlock acquisition, per-topology verification. It is the only project
-          that references StackExchange.Redis, which is what will make a later
-          swap to a CodeBrix Redis client a one-project change.
+          that references a Redis client, and that client is
+          CodeBrix.Redis.MitLicenseForever -- the family's own drop-in
+          replacement for StackExchange.Redis, RESPite and RedLock.net. Keeping
+          it to one project is what made that swap a one-project change.
 
       src/libs/RedisSetupTool.TerminalView/
           Bridges a CodeBrix.Docker exec stream into the TerminalView control.

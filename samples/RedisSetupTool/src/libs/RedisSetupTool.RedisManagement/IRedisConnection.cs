@@ -5,9 +5,10 @@ using System.Threading.Tasks;
 namespace RedisSetupTool.RedisManagement;
 
 /// <summary>
-/// The seam that keeps StackExchange.Redis in one file. Everything above this - the probe, the lock
+/// The seam that keeps the Redis client in one file. Everything above this - the probe, the lock
 /// service, the health monitor - talks to this interface, which is what lets them be tested with a
-/// fake and no daemon, and what makes a later swap to a different client a one-project change.
+/// fake and no daemon, and what made the swap from StackExchange.Redis to CodeBrix.Redis a
+/// one-project change.
 /// </summary>
 public interface IRedisConnection : IAsyncDisposable
 {

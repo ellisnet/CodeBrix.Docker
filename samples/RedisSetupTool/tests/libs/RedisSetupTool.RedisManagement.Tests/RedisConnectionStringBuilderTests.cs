@@ -1,6 +1,6 @@
 using System;
+using CodeBrix.Redis;
 using SilverAssertions;
-using StackExchange.Redis;
 using Xunit;
 
 namespace RedisSetupTool.RedisManagement.Tests;
