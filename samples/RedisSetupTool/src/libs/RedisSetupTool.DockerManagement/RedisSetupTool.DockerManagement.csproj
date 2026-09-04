@@ -21,7 +21,8 @@
   <!-- PrivateAssets=all also stops the RUNTIME asset flowing, which would leave every consumer
        with a missing CodeBrix.Docker.dll at load time. Re-publish just the assembly as a
        copy-to-output item so consumers get the file without getting the compile-time reference.
-       Add it to ReferenceCopyLocalPaths as well so it is listed in the consumer's deps.json. -->
+       The assembly still does not appear in the consumer's deps.json, which is why
+       DockerAssemblyResolver hooks AssemblyLoadContext to find it at load time. -->
   <Target Name="FlowDockerAssemblyToConsumers"
           BeforeTargets="GetCopyToOutputDirectoryItems"
           DependsOnTargets="ResolveReferences">

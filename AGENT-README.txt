@@ -1727,11 +1727,11 @@ disabled entirely, which is right for anything that is not an HTTP server).
 Verify the result before shipping it.
 
 The default tool image is mintoolkit/mint:latest. The project renamed itself
-from "slim" to "mint"; the older dslim/slim repository is retired at version
-1.40.11 and CANNOT talk to Docker 25 or later, because it negotiates Engine API
-1.24 and the daemon's minimum is 1.40. If you deliberately need the old build on
-an old daemon, assign AnalysisOperations.SlimImage, or SlimOptions.ToolImage for
-a single call. The public type names keep the Slim* spelling.
+from "slim" to "mint"; the older dslim/slim repository is retired and CANNOT
+talk to Docker 25 or later, because it negotiates Engine API 1.24 and the
+daemon's minimum is 1.40. If you deliberately need the old build on an old
+daemon, assign AnalysisOperations.SlimImage, or SlimOptions.ToolImage for a
+single call. The public type names keep the Slim* spelling.
 
 
 EVERY PUBLIC TYPE, BY AREA
@@ -2754,8 +2754,11 @@ COMMON PITFALLS TO AVOID
 
 3. DO NOT expect CreateAsync or RunAsync to pull a missing image. They do not.
    A missing image is a DockerImageNotFoundException. Call
-   Images.PullAsync(reference) first -- it is a no-op when the image is already
-   local.
+   Images.PullAsync(reference) first -- it is cheap when the image is already
+   local, because the daemon downloads no layers it already has, but it still
+   contacts the registry. It is not an offline no-op: PullAsync makes no
+   local-presence check of its own, so with no reachable registry it fails
+   rather than returning quietly.
 
 4. DO NOT treat a missing shell as an exception. Asking for /bin/bash in an
    image that has none (alpine, busybox and the official redis alpine images

@@ -220,11 +220,15 @@ Two environment gates control what runs:
     REDISSETUP_TEST_HEAVY=1              also run the C1, D2 and H1 topologies,
                                          which are six, six and five containers
                                          and would otherwise triple the pass.
-    REDISSETUP_TEST_REDIS=host:port      also run the live Redis probe tests
-                                         against an endpoint you supply.
+    REDISSETUP_TEST_REDIS=host:port[,password]
+                                         also run the live Redis probe tests
+                                         against an endpoint you supply. The
+                                         password element is optional.
 
-Without them those tests are skipped, which is the three skips each suite
-reports. Every resource the suites create carries codebrix.redissetup.tests=true
+Without them those tests are skipped, which is the three skips that the
+DockerManagement and the RedisManagement suites each report;
+RedisSetupTool.TerminalView.Tests has no gated tests and reports no skips.
+Every resource the suites create carries codebrix.redissetup.tests=true
 and is swept by that label alone, so a suite run never touches an instance made
 by the application -- or anything else on the daemon.
 

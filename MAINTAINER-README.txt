@@ -685,14 +685,6 @@ OTHER DELIBERATE DESIGN CHOICES, SO THEY ARE NOT MISTAKEN FOR OVERSIGHTS
     of page cache so it does not fire on idle containers whose few hundred
     kilobytes of cache technically dominate their usage.
 
-KNOWN STALE ITEM IN README.md
------------------------------
-README.md links the image optimizer to https://github.com/slimtoolkit/slim. That
-project moved to https://github.com/mintoolkit/mint, which is what the library
-now defaults to. README.md is deliberately not edited by documentation passes
-(the family restructure rule), so this is recorded here for whoever next touches
-it by hand.
-
 THE AI-AGENT POINTER STUBS
 --------------------------
 AGENTS.md, CLAUDE.md, .clinerules, .cursorrules, .cursor/rules/agent-readme.mdc,
