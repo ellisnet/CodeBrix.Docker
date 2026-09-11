@@ -10,6 +10,6 @@
 
   <ItemGroup>
     <!-- TerminalControl - the only control this library touches, through one adapter class -->
-    <PackageReference Include="CodeBrix.Platform.TerminalView.ApacheLicenseForever" Version="1.0.243.226" />
+    <PackageReference Include="CodeBrix.Platform.TerminalView.ApacheLicenseForever" Version="1.0.254.167" />
   </ItemGroup>
 </Project>
