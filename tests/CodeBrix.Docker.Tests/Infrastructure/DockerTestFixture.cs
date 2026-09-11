@@ -232,6 +232,20 @@ public sealed class DockerTestFixture : IAsyncLifetime
         return byId.Values.ToArray();
     }
 
+    /// <summary>
+    /// Lists the suite's own containers minus the sshd harness, which the fixture keeps running on
+    /// purpose from the first <c>ssh://</c> test until the sweep in <see cref="DisposeAsync"/>.
+    /// </summary>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The containers no test is entitled to have left behind.</returns>
+    public async Task<IReadOnlyList<ContainerSummary>> ListLeakedContainersAsync(
+        CancellationToken cancellationToken)
+    {
+        var harness = _sshd?.ContainerIds ?? [];
+        var containers = await ListOwnContainersAsync(cancellationToken);
+        return containers.Where(container => !harness.Contains(container.Id, StringComparer.Ordinal)).ToArray();
+    }
+
     private async Task CleanupAsync(CancellationToken cancellationToken)
     {
         foreach (var container in await ListOwnContainersAsync(cancellationToken))

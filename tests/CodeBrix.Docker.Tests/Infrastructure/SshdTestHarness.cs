@@ -66,6 +66,9 @@ public sealed class SshdTestHarness : IDisposable
     /// <summary>Gets an empty <c>known_hosts</c> file, for which neither container is trusted.</summary>
     public string EmptyKnownHostsPath { get; private init; }
 
+    /// <summary>Gets the ids of the containers this harness keeps running for the life of the suite.</summary>
+    public IReadOnlyList<string> ContainerIds { get; private init; } = [];
+
     /// <summary>
     /// Builds the images, starts both containers and records their host keys.
     /// </summary>
@@ -111,6 +114,7 @@ public sealed class SshdTestHarness : IDisposable
                 IdentityFilePath = identityFile,
                 KnownHostsPath = workspace.WriteFile("known_hosts", knownHosts),
                 EmptyKnownHostsPath = workspace.WriteFile("empty_known_hosts", string.Empty),
+                ContainerIds = [withCli, withoutCli],
             };
         }
         catch (Exception)

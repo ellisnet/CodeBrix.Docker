@@ -21,7 +21,7 @@ public sealed class ResourceLeakGuardTests(DockerTestFixture fixture)
         // Tests run sequentially, so nothing else is creating containers right now; an auto-removing
         // container may still be on its way out, hence the poll.
         var leaked = await Poll.UntilAsync(
-            token => fixture.ListOwnContainersAsync(token),
+            token => fixture.ListLeakedContainersAsync(token),
             containers => containers.Count == 0,
             TimeSpan.FromSeconds(30), "every container created by the suite to be removed",
             TimeSpan.FromSeconds(1), cancellation.Token);
