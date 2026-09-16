@@ -56,6 +56,9 @@ runs the operating system's own SSH client rather than referencing an SSH librar
 * A reachable Docker daemon, in Linux-containers mode. The endpoint is resolved from
   `DockerClientOptions.Endpoint`, then `DOCKER_HOST`, then the platform default -
   `npipe://./pipe/docker_engine` on Windows and `unix:///var/run/docker.sock` elsewhere.
+  On Linux and macOS, when `/var/run/docker.sock` does not exist (Docker Desktop for Mac does not
+  create it unless "Allow the default Docker socket to be used" is enabled), the socket named by the
+  Docker CLI's current context and then Docker Desktop's `~/.docker/run/docker.sock` are tried first.
   TLS-secured `https://` endpoints are not supported; use `ssh://` to reach a remote daemon.
 * The `docker` command-line tool on PATH, but only for four operations: `Images.BuildAsync`
   (BuildKit builds go through the CLI), `Images.PullAsync` *when* an anonymous pull is refused

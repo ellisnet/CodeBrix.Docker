@@ -61,6 +61,13 @@ internal sealed class ContainerCreateHostConfig
     [JsonPropertyName("Privileged")]
     public bool? Privileged { get; init; }
 
+
+    /// <summary>The network mode, for example <c>host</c>; <see langword="null"/> leaves the daemon default.</summary>
+
+    [JsonPropertyName("NetworkMode")]
+
+    public string NetworkMode { get; init; }
+
     [JsonPropertyName("LogConfig")]
     public LogConfig LogConfig { get; init; }
 

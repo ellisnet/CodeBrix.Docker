@@ -577,6 +577,7 @@ public sealed class ContainerOperations
                 RestartPolicy = restartPolicy,
                 AutoRemove = spec.AutoRemove ? true : null,
                 Privileged = spec.Privileged ? true : null,
+                NetworkMode = string.IsNullOrWhiteSpace(spec.NetworkMode) ? null : spec.NetworkMode,
                 LogConfig = logConfig,
                 NanoCpus = limits?.ToNanoCpus(),
                 CpusetCpus = limits?.CpusetCpus,

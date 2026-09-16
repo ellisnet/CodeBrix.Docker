@@ -99,7 +99,7 @@ public sealed class AnalysisOperationsTests
 
         //Assert
         command.Should().Equal("build", "--target", "nginx:alpine", "--tag", "optimized:latest",
-            "--continue-after=10", "--http-probe=false");
+            "--continue-after=10", "--sensor-ipc-mode", "proxy", "--http-probe=false");
     }
 
     [Fact]
@@ -115,7 +115,7 @@ public sealed class AnalysisOperationsTests
 
         //Assert
         command.Should().Equal("build", "--target", "nginx:alpine", "--tag", "optimized:latest",
-            "--continue-after=5", "--http-probe-cmd", "/", "--http-probe-cmd", "/health");
+            "--continue-after=5", "--sensor-ipc-mode", "proxy", "--http-probe-cmd", "/", "--http-probe-cmd", "/health");
         command.Should().NotContain("--http-probe=false");
     }
 

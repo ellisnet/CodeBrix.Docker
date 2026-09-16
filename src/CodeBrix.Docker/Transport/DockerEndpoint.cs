@@ -1,4 +1,8 @@
 using System;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 
 namespace CodeBrix.Docker;
 
@@ -70,6 +74,8 @@ internal sealed class DockerEndpoint
 
     /// <summary>
     /// Resolves the daemon endpoint: the explicit option, then <c>DOCKER_HOST</c>, then the platform default.
+    /// On Linux and macOS, when <c>/var/run/docker.sock</c> does not exist, the Docker CLI's current context and
+    /// Docker Desktop's per-user socket (<c>~/.docker/run/docker.sock</c>) are tried before falling back to it.
     /// </summary>
     /// <param name="explicitEndpoint">The endpoint configured on <see cref="DockerClientOptions"/>, if any.</param>
     /// <returns>The resolved endpoint string.</returns>
@@ -86,7 +92,119 @@ internal sealed class DockerEndpoint
             return fromEnvironment.Trim();
         }
 
-        return OperatingSystem.IsWindows() ? WindowsDefault : UnixDefault;
+        if (OperatingSystem.IsWindows())
+        {
+            return WindowsDefault;
+        }
+
+        // The Linux default. Docker Desktop for Mac does not create /var/run/docker.sock unless
+        // "Allow the default Docker socket to be used" is switched on, so when it is absent the
+        // fallbacks below look where the Docker CLI itself would: the socket the CLI's current
+        // context names, then Docker Desktop's per-user socket. Every candidate must exist on disk;
+        // when none does the classic default is returned unchanged so the error message stays the
+        // familiar one.
+        if (File.Exists(UnixDefaultSocketPath))
+        {
+            return UnixDefault;
+        }
+
+        var fromContext = TryResolveFromDockerCliContext();
+        if (fromContext != null)
+        {
+            return fromContext;
+        }
+
+        var desktopSocket = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".docker", "run", "docker.sock");
+        if (File.Exists(desktopSocket))
+        {
+            return UnixSocketScheme + "://" + desktopSocket;
+        }
+
+        return UnixDefault;
+    }
+
+    /// <summary>The socket path behind <see cref="UnixDefault"/>.</summary>
+    private const string UnixDefaultSocketPath = "/var/run/docker.sock";
+
+    /// <summary>
+    /// Returns the <c>unix://</c> endpoint of the Docker CLI's current context when that context
+    /// names a Unix socket that exists, otherwise <see langword="null"/>. The CLI records the
+    /// current context name in <c>~/.docker/config.json</c> (overridable through
+    /// <c>DOCKER_CONTEXT</c>) and each context's endpoint in
+    /// <c>~/.docker/contexts/meta/&lt;sha256(name)&gt;/meta.json</c>. Anything unreadable or
+    /// malformed simply yields <see langword="null"/>; this is a best-effort fallback, never a
+    /// failure path.
+    /// </summary>
+    private static string TryResolveFromDockerCliContext()
+    {
+        try
+        {
+            var dockerDir = Environment.GetEnvironmentVariable("DOCKER_CONFIG");
+            if (string.IsNullOrWhiteSpace(dockerDir))
+            {
+                dockerDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".docker");
+            }
+
+            var contextName = Environment.GetEnvironmentVariable("DOCKER_CONTEXT");
+            if (string.IsNullOrWhiteSpace(contextName))
+            {
+                var configPath = Path.Combine(dockerDir, "config.json");
+                if (!File.Exists(configPath))
+                {
+                    return null;
+                }
+
+                using var config = JsonDocument.Parse(File.ReadAllText(configPath));
+                if (!config.RootElement.TryGetProperty("currentContext", out var current)
+                    || current.ValueKind != JsonValueKind.String)
+                {
+                    return null;
+                }
+
+                contextName = current.GetString();
+            }
+
+            if (string.IsNullOrWhiteSpace(contextName) || contextName == "default")
+            {
+                return null;
+            }
+
+            var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(contextName))).ToLowerInvariant();
+            var metaPath = Path.Combine(dockerDir, "contexts", "meta", hash, "meta.json");
+            if (!File.Exists(metaPath))
+            {
+                return null;
+            }
+
+            using var meta = JsonDocument.Parse(File.ReadAllText(metaPath));
+            if (!meta.RootElement.TryGetProperty("Endpoints", out var endpoints)
+                || !endpoints.TryGetProperty("docker", out var docker)
+                || !docker.TryGetProperty("Host", out var host)
+                || host.ValueKind != JsonValueKind.String)
+            {
+                return null;
+            }
+
+            var hostValue = host.GetString();
+            if (string.IsNullOrWhiteSpace(hostValue))
+            {
+                return null;
+            }
+
+            var prefix = UnixSocketScheme + "://";
+            if (!hostValue.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                // A tcp:// or ssh:// context is honoured as written; only a socket is checked for existence.
+                return hostValue;
+            }
+
+            return File.Exists(hostValue.Substring(prefix.Length)) ? hostValue : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

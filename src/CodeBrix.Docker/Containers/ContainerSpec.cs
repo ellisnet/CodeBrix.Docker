@@ -64,6 +64,14 @@ public sealed class ContainerSpec
     public string NetworkName { get; set; }
 
     /// <summary>
+    /// Gets or sets the daemon-level network mode (<c>HostConfig.NetworkMode</c>), for example
+    /// <c>host</c> or <c>none</c>. <see langword="null"/>, the default, leaves the daemon's own default
+    /// (<c>bridge</c>) in place, so existing callers are unaffected. Use <see cref="NetworkName"/> to
+    /// attach to a user-defined network; use this for the built-in <c>host</c> and <c>none</c> modes.
+    /// </summary>
+    public string NetworkMode { get; set; }
+
+    /// <summary>
     /// Gets or sets additional DNS names the container answers to on <see cref="NetworkName"/>.
     /// </summary>
     public IList<string> NetworkAliases { get; set; } = [];

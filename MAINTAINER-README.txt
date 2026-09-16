@@ -499,6 +499,40 @@ current spelling. "Slim" reads as the verb, the package has not shipped under
 any other name, and the tool image is an implementation detail behind an
 overridable property. Do not rename them to Mint*.
 
+HOW MINT REACHES ITS SENSOR, AND WHY THE TOOL CONTAINER USES HOST NETWORKING
+----------------------------------------------------------------------------
+mint runs the target image in a temporary container with its sensor inside, and
+the master process must open a channel to that sensor. In its default IPC mode it
+looks the temporary container's address up through the LEGACY top-level
+NetworkSettings.IPAddress field of container inspect. That field was removed in
+Engine API v1.52 (Docker 29.0) and, on Docker Desktop's Engine 29.8 (observed
+2026-09-15 on macOS 15.8, Docker Desktop 4.91), it is no longer backfilled for
+older API versions either: the raw API returns a NetworkSettings with only
+Networks, Ports, SandboxID and SandboxKey at v1.44, v1.51, v1.52 and v1.56 alike.
+mint 1.41.8 then logs "obtained IP address ip=''", the master's
+ipc.NewClient times out ("wait timeout"), the sensor container is reported
+crashed, and the build exits 25. Neither --sensor-ipc-mode direct, host
+networking on its own, nor DOCKER_API_VERSION=1.51 in the tool container changes
+that, and mint 1.41.7 cannot talk to Docker 29 at all (client API 1.32).
+
+The pairing that works is host networking for the tool container PLUS
+"--sensor-ipc-mode proxy": in proxy mode the master connects to a port the daemon
+publishes on the Docker host, and with the tool container in the host network
+namespace that port is reachable at localhost, so the bridge address is never
+needed. OptimizeImageAsync therefore sets ContainerSpec.NetworkMode = "host" and
+BuildSlimCommand always emits "--sensor-ipc-mode proxy". On a Linux daemon that
+still backfills the legacy field this is a no-op in outcome; on one that does not
+it is the difference between exit 25 and a minified image. Verify on the raw API
+whether a given daemon backfills the field:
+
+    curl -s --unix-socket /var/run/docker.sock \
+      http://localhost/v1.44/containers/<id>/json | grep -o '"IPAddress":"[^"]*"' | head -1
+
+(No output means no backfill, and the pairing above is what keeps Slim working.)
+
+ContainerSpec.NetworkMode is new and additive: null leaves HostConfig.NetworkMode
+unset, so every existing caller is unaffected.
+
 One cleanliness note: with mint, a gated Slim run leaves the daemon exactly as
 it found it -- zero container and zero image residue. The retired dslim image
 had been leaving a stray `docker-slim-empty-image:latest` behind, which the

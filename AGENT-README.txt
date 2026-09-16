@@ -154,6 +154,13 @@ The endpoint is resolved once, when the client is created, in this order:
     3. The platform default:
          Windows        ->  npipe://./pipe/docker_engine
          anything else  ->  unix:///var/run/docker.sock
+       On Linux and macOS, if /var/run/docker.sock does NOT exist, two fallbacks
+       are tried before that default is returned anyway: the endpoint of the
+       Docker CLI's current context (DOCKER_CONTEXT, else currentContext in
+       ~/.docker/config.json, read from ~/.docker/contexts/meta/<sha256>/meta.json)
+       and then ~/.docker/run/docker.sock, the per-user socket Docker Desktop for
+       Mac creates. A socket candidate is only used when it exists on disk. On a
+       machine where /var/run/docker.sock exists nothing changes.
 
 DockerClient.Endpoint reports the string that was resolved, exactly as written.
 Reading it back is the cheapest way to confirm which daemon a client is talking
@@ -3057,6 +3064,7 @@ CLIENT      using var client = DockerClient.Create();
 ENDPOINTS   unix:///var/run/docker.sock | npipe://./pipe/docker_engine |
             tcp://host:port | ssh://[user@]host[:port]      https:// -> throws
             order: options.Endpoint -> DOCKER_HOST -> platform default
+                   (Unix: /var/run/docker.sock, else CLI context, else ~/.docker/run/docker.sock)
 
 SYSTEM      client.System.PingAsync()                     // bool, never throws
             .GetVersionAsync() -> DockerVersionInfo

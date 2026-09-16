@@ -351,6 +351,13 @@ public sealed class AnalysisOperations
             Command = BuildSlimCommand(imageReference, outputTag, options),
             Labels = { [ToolLabelName] = ToolLabelValue },
             Mounts = { MountSpec.Bind(DockerSocketPath, DockerSocketPath) },
+            // Host networking, paired with "--sensor-ipc-mode proxy" in BuildSlimCommand: mint reaches
+            // its sensor through a port the daemon publishes on the Docker host, so it never has to
+            // learn the temporary container's bridge address. That address is the legacy top-level
+            // NetworkSettings.IPAddress inspect field, which Docker Desktop's Engine 29.8 no longer
+            // returns for any API version; without this pairing mint 1.41.8 times out there with
+            // "ipc.NewClient init error = wait timeout" and exit code 25.
+            NetworkMode = "host",
         };
 
         using var timeoutSource = CreateTimeoutSource(options.Timeout, cancellationToken);
@@ -404,6 +411,8 @@ public sealed class AnalysisOperations
             "--tag",
             outputTag,
             "--continue-after=" + options.ContinueAfterSeconds.ToString(CultureInfo.InvariantCulture),
+            "--sensor-ipc-mode",
+            "proxy",
         };
 
         if (options.HttpProbePaths.Count == 0)

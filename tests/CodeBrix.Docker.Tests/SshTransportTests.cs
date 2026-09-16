@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -67,6 +68,25 @@ public sealed class SshTransportTests(DockerTestFixture fixture, ITestOutputHelp
         // https:// stays unsupported: reaching a remote daemon is what ssh:// is for.
         Action tls = () => DockerEndpoint.Parse("https://host:2376");
         tls.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void Resolve_WithoutAnyConfiguration_NamesASocketThatExistsOnUnix()
+    {
+        //Arrange
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the Unix socket fallbacks do not apply on Windows");
+        Assert.SkipWhen(!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DOCKER_HOST")),
+            "DOCKER_HOST is set, so the platform-default fallbacks are never consulted");
+
+        //Act
+        var resolved = DockerEndpoint.Parse(DockerEndpoint.Resolve(explicitEndpoint: null));
+
+        //Assert
+        // /var/run/docker.sock when it exists (Linux, or Docker Desktop with the default socket
+        // enabled), otherwise whatever the Docker CLI's context or Docker Desktop's per-user socket
+        // provides. Whichever it was, the suite's fixture connected through it, so it must exist.
+        resolved.Kind.Should().Be(DockerEndpointKind.UnixSocket);
+        File.Exists(resolved.SocketPath).Should().BeTrue($"the resolved socket '{resolved.SocketPath}' should exist");
     }
 
     [Fact]
