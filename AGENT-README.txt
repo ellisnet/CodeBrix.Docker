@@ -1588,11 +1588,13 @@ labelled and is always removed in a finally block.
         public const string ToolLabelValue = "true";
         public const string ContainerNamePrefix = "codebrix-tool-";
         public const string DefaultTrivyCacheVolumeName = "codebrix-docker-trivy-cache";
+        public const string DefaultSlimImage      = "mintoolkit/mint:latest";      // every daemon but arm64
+        public const string DefaultSlimArm64Image = "mintoolkit/mint-arm:latest";  // used when GET /version says arm64
 
         public string TrivyImage    { get; set; } = "aquasec/trivy:latest";
         public string DiveImage     { get; set; } = "wagoodman/dive:latest";
         public string HadolintImage { get; set; } = "hadolint/hadolint:latest";
-        public string SlimImage     { get; set; } = "mintoolkit/mint:latest";
+        public string SlimImage     { get; set; } = DefaultSlimImage;
 
         public Task<TrivyScanResult> ScanImageAsync(
             string imageReference, TrivyScanOptions options = null,
@@ -1739,6 +1741,17 @@ talk to Docker 25 or later, because it negotiates Engine API 1.24 and the
 daemon's minimum is 1.40. If you deliberately need the old build on an old
 daemon, assign AnalysisOperations.SlimImage, or SlimOptions.ToolImage for a
 single call. The public type names keep the Slim* spelling.
+
+mintoolkit/mint is published for amd64 ONLY. The arm64 build lives in the
+separate repository mintoolkit/mint-arm (AnalysisOperations.DefaultSlimArm64Image).
+While SlimImage still holds its default and no SlimOptions.ToolImage is given,
+OptimizeImageAsync reads the daemon architecture from GET /version and runs
+mint-arm when it is arm64 - Apple Silicon Docker Desktop then runs the tool
+natively instead of under Rosetta, and a Linux arm64 host with no amd64 emulation
+can run it at all. Assigning ANY other value to SlimImage, or any ToolImage,
+switches that off: the image is used exactly as written on every architecture.
+On amd64 daemons nothing about this is observable; they get mintoolkit/mint:latest
+as they always have.
 
 
 EVERY PUBLIC TYPE, BY AREA
@@ -3165,6 +3178,7 @@ ANALYSIS    client.Analysis
             .OptimizeImageAsync(ref, new SlimOptions { OutputTag, HttpProbePaths,
                 ContinueAfterSeconds, Timeout, ToolImage }) -> SlimResult   // EXPERIMENTAL
             tool images: TrivyImage, DiveImage, HadolintImage, SlimImage
+                         (default SlimImage -> mintoolkit/mint-arm on arm64 daemons)
             tool label : AnalysisOperations.ToolLabelName = "codebrix.docker.tool"
 
 ERRORS      DockerException

@@ -46,6 +46,16 @@ public sealed class AnalysisOperations
     /// <summary>The default name of the volume caching Trivy's vulnerability database.</summary>
     public const string DefaultTrivyCacheVolumeName = "codebrix-docker-trivy-cache";
 
+    /// <summary>The Slim tool image run by default on every daemon except arm64: <c>mintoolkit/mint:latest</c>.</summary>
+    public const string DefaultSlimImage = "mintoolkit/mint:latest";
+
+    /// <summary>
+    /// The Slim tool image substituted for <see cref="DefaultSlimImage"/> when the daemon reports an arm64
+    /// architecture: <c>mintoolkit/mint-arm:latest</c>. The mint project publishes its arm64 build under this
+    /// separate repository rather than as a second platform of <c>mintoolkit/mint</c>, which is amd64 only.
+    /// </summary>
+    public const string DefaultSlimArm64Image = "mintoolkit/mint-arm:latest";
+
     private const string DockerSocketPath = "/var/run/docker.sock";
     private const string TrivyCachePath = "/root/.cache";
     private const string DiveExportPath = "/tmp/dive.json";
@@ -72,7 +82,8 @@ public sealed class AnalysisOperations
     public string HadolintImage { get; set; } = "hadolint/hadolint:latest";
 
     /// <summary>
-    /// Gets or sets the Slim image to run. Defaults to <c>mintoolkit/mint:latest</c>.
+    /// Gets or sets the Slim image to run. Defaults to <see cref="DefaultSlimImage"/> (<c>mintoolkit/mint:latest</c>),
+    /// which <see cref="OptimizeImageAsync"/> swaps for <see cref="DefaultSlimArm64Image"/> on an arm64 daemon.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -89,8 +100,17 @@ public sealed class AnalysisOperations
     /// <see cref="SlimOptions.ToolImage"/> for a single run — to go back to the retired image against an
     /// older daemon.
     /// </para>
+    /// <para>
+    /// <c>mintoolkit/mint</c> is published for amd64 only; the arm64 build is the separate repository
+    /// <c>mintoolkit/mint-arm</c>. While this property still holds its default and no
+    /// <see cref="SlimOptions.ToolImage"/> is given, <see cref="OptimizeImageAsync"/> asks the daemon for its
+    /// architecture (<c>GET /version</c>) and runs <see cref="DefaultSlimArm64Image"/> when that is arm64, so
+    /// Apple Silicon Docker Desktop runs the tool natively instead of under emulation and Linux arm64 hosts
+    /// without emulation can run it at all. Any other value here, or any <see cref="SlimOptions.ToolImage"/>,
+    /// is used exactly as written on every architecture.
+    /// </para>
     /// </remarks>
-    public string SlimImage { get; set; } = "mintoolkit/mint:latest";
+    public string SlimImage { get; set; } = DefaultSlimImage;
 
     // ---------------------------------------------------------------------------------------
     // Trivy
@@ -334,7 +354,7 @@ public sealed class AnalysisOperations
         ArgumentException.ThrowIfNullOrWhiteSpace(imageReference);
         options ??= new SlimOptions();
 
-        var toolImage = string.IsNullOrWhiteSpace(options.ToolImage) ? SlimImage : options.ToolImage;
+        var toolImage = await ResolveSlimToolImageAsync(options, cancellationToken).ConfigureAwait(false);
         var outputTag = string.IsNullOrWhiteSpace(options.OutputTag)
             ? imageReference + ".slim"
             : options.OutputTag;
@@ -400,6 +420,58 @@ public sealed class AnalysisOperations
     /// Builds Slim's argument list. Kept separate so that the argument shape can be verified without
     /// running the tool.
     /// </summary>
+    /// <summary>
+    /// Picks the Slim tool image for a run: an explicit <see cref="SlimOptions.ToolImage"/> or a non-default
+    /// <see cref="SlimImage"/> is used as written; the untouched default is swapped for
+    /// <see cref="DefaultSlimArm64Image"/> when the daemon reports an arm64 architecture. The <c>GET /version</c>
+    /// lookup is best effort - a <see cref="DockerException"/> there leaves the configured image in place,
+    /// because the image pull that follows surfaces an unreachable daemon with the familiar message.
+    /// </summary>
+    private async Task<string> ResolveSlimToolImageAsync(SlimOptions options, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(options.ToolImage))
+        {
+            return options.ToolImage;
+        }
+
+        if (!string.Equals(SlimImage, DefaultSlimImage, StringComparison.Ordinal))
+        {
+            return SlimImage;
+        }
+
+        string architecture = null;
+        try
+        {
+            var version = await _api.GetAsync<DockerVersionInfo>("version", cancellationToken).ConfigureAwait(false);
+            architecture = version?.Arch;
+        }
+        catch (DockerException)
+        {
+            // Fall through with the configured default; EnsureImageAsync reports the daemon problem.
+        }
+
+        return ResolveSlimImage(SlimImage, architecture);
+    }
+
+    /// <summary>
+    /// The pure half of the tool-image choice: <paramref name="configuredImage"/> is returned unchanged unless it
+    /// is exactly <see cref="DefaultSlimImage"/> and <paramref name="daemonArchitecture"/> names arm64
+    /// (<c>arm64</c> as <c>GET /version</c> spells it, or <c>aarch64</c> as <c>GET /info</c> does), in which case
+    /// <see cref="DefaultSlimArm64Image"/> is returned. Unknown, empty or null architectures keep the default.
+    /// </summary>
+    internal static string ResolveSlimImage(string configuredImage, string daemonArchitecture)
+    {
+        if (!string.Equals(configuredImage, DefaultSlimImage, StringComparison.Ordinal))
+        {
+            return configuredImage;
+        }
+
+        var isArm64 = string.Equals(daemonArchitecture, "arm64", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(daemonArchitecture, "aarch64", StringComparison.OrdinalIgnoreCase);
+
+        return isArm64 ? DefaultSlimArm64Image : configuredImage;
+    }
+
     internal static IReadOnlyList<string> BuildSlimCommand(string imageReference, string outputTag,
         SlimOptions options)
     {

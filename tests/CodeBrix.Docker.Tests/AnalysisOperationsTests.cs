@@ -45,6 +45,48 @@ public sealed class AnalysisOperationsTests
         image.Should().NotContain("dslim");
     }
 
+    [Theory]
+    [InlineData("amd64", AnalysisOperations.DefaultSlimImage)]
+    [InlineData("386", AnalysisOperations.DefaultSlimImage)]
+    [InlineData("arm64", AnalysisOperations.DefaultSlimArm64Image)]
+    [InlineData("ARM64", AnalysisOperations.DefaultSlimArm64Image)]
+    [InlineData("aarch64", AnalysisOperations.DefaultSlimArm64Image)]
+    [InlineData("", AnalysisOperations.DefaultSlimImage)]
+    [InlineData(null, AnalysisOperations.DefaultSlimImage)]
+    public void ResolveSlimImage_SwapsTheDefaultForTheArmBuildOnlyOnArm64Daemons(string daemonArchitecture,
+        string expected)
+    {
+        //Arrange
+        // mintoolkit/mint is published for amd64 only; the arm64 build is the separate repository
+        // mintoolkit/mint-arm. GET /version reports "arm64" for such a daemon (GET /info says "aarch64"),
+        // and an unknown or missing architecture must leave the long-standing default untouched.
+
+        //Act
+        var resolved = AnalysisOperations.ResolveSlimImage(AnalysisOperations.DefaultSlimImage, daemonArchitecture);
+
+        //Assert
+        resolved.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("dslim/slim:latest", "arm64")]
+    [InlineData("dslim/slim:latest", "amd64")]
+    [InlineData("mintoolkit/mint:1.41.8", "arm64")]
+    [InlineData("mintoolkit/mint-arm:1.41.8", "amd64")]
+    public void ResolveSlimImage_KeepsAnExplicitlyConfiguredImageOnEveryArchitecture(string configured,
+        string daemonArchitecture)
+    {
+        //Arrange
+        // Only the untouched default is architecture-aware. A caller who pinned any image, even a
+        // versioned tag of the default repository, gets exactly that image.
+
+        //Act
+        var resolved = AnalysisOperations.ResolveSlimImage(configured, daemonArchitecture);
+
+        //Assert
+        resolved.Should().Be(configured);
+    }
+
     [Fact]
     public void TrivyImage_DefaultsToTheOfficialAquaSecurityImage()
     {

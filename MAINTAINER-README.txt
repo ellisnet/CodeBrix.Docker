@@ -177,8 +177,9 @@ THE ENVIRONMENT GATE
 gates EXACTLY ONE test -- SlimTests.OptimizeImageAsync_ProducesASmallerImage --
 through Infrastructure/EnvGatedFactAttribute.cs, a FactAttribute subclass that
 sets Skip unless the named variable equals the expected value. Nothing else in
-the suite is gated. The default run is therefore 102 total / 101 passed / 1
-skipped; with the gate open it is 102 / 102 / 0.
+the suite is gated. The default run is therefore 114 total / 113 passed / 1
+skipped; with the gate open it is 114 / 114 / 0 (counts from 2026-09-15, after
+the ResolveSlimImage theories were added).
 
 TREAT THE GATED RUN AS PART OF A RELEASE CHECK, NOT AN OPTIONAL EXTRA. That
 single test is what caught a shipped library defect that had never been
@@ -532,6 +533,35 @@ whether a given daemon backfills the field:
 
 ContainerSpec.NetworkMode is new and additive: null leaves HostConfig.NetworkMode
 unset, so every existing caller is unaffected.
+
+WHICH MINT IMAGE RUNS, AND WHY IT DEPENDS ON THE DAEMON
+--------------------------------------------------------
+mintoolkit/mint:latest is a single-platform amd64 image; there is no manifest
+list. The mint project ships its arm64 build as a SEPARATE Docker Hub repository,
+mintoolkit/mint-arm, whose tags track the main one release for release (1.41.8
+on both, 2025-12-12). On Apple Silicon Docker Desktop the amd64 image runs under
+Rosetta and does work, but on a Linux arm64 host without binfmt emulation it
+cannot start. So OptimizeImageAsync resolves the tool image in this order:
+
+    SlimOptions.ToolImage set              -> that image, as written
+    AnalysisOperations.SlimImage != default -> that image, as written
+    otherwise                               -> GET /version; Arch "arm64" (or
+                                               "aarch64") picks mint-arm, anything
+                                               else keeps mintoolkit/mint:latest
+
+The pure part is AnalysisOperations.ResolveSlimImage(configured, arch), unit
+tested without a daemon in AnalysisOperationsTests; the /version lookup is
+best-effort and any DockerException there falls back to the configured value,
+because the very next call (EnsureImageAsync) will surface a dead daemon anyway.
+The key is the DAEMON architecture, not the target image's: mint injects its
+sensor binary into the target container and that binary runs on the daemon's
+kernel, so an arm64 sensor is right even for an emulated amd64 target on an
+arm64 daemon. Verified 2026-09-15 on an Apple Silicon Mac mini (Docker Desktop
+4.91, Engine 29.8): mint-arm with the host-networking + proxy pairing above
+minified nginx:alpine 6.02x, exactly what the amd64 image produced under
+Rosetta. Both images log one "finishCommand: output image ID mismatch" error
+line on this engine and still exit 0 with the image present; it is a mint quirk,
+not an architecture difference, and SlimResult.Succeeded is unaffected.
 
 One cleanliness note: with mint, a gated Slim run leaves the daemon exactly as
 it found it -- zero container and zero image residue. The retired dslim image
