@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using SilverAssertions;
 using Xunit;
 
 namespace CodeBrix.Docker.Tests;
@@ -68,6 +69,36 @@ public sealed class DiagnosticsTests(DockerTestFixture fixture)
             Assert.Equal(0, report.Periods);
             Assert.Equal(0d, report.ThrottleRatio);
             Assert.Contains("unavailable", report.Interpretation, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            await fixture.RemoveContainerQuietlyAsync(id);
+        }
+    }
+
+    [Fact]
+    public async Task GetCpuThrottlingAsync_WhenTheContainerIsRemovedMidSample_ReportsCountersAsUnavailable()
+    {
+        //Arrange
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        var spec = fixture.Spec("throttlegone", "busybox:latest", "sleep", "300");
+        string id = null;
+
+        try
+        {
+            id = await Client.Containers.RunAsync(spec, cancellation.Token);
+
+            //Act
+            // The live sample takes the daemon about a second, and a container removed inside that window
+            // ends the stats response with a 200 and an empty body.
+            var diagnosis = Client.Diagnostics.GetCpuThrottlingAsync(id, cancellation.Token);
+            await Task.Delay(TimeSpan.FromMilliseconds(300), cancellation.Token);
+            await Client.Containers.RemoveAsync(id, force: true, cancellationToken: cancellation.Token);
+            var report = await diagnosis;
+
+            //Assert
+            report.HasLiveData.Should().BeFalse();
+            report.Severity.Should().Be(ThrottleSeverity.None);
         }
         finally
         {

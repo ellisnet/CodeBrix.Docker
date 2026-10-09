@@ -244,21 +244,9 @@ public sealed class DiagnosticsOperations
             return null;
         }
 
-        try
-        {
-            var stats = await _containers.GetStatsAsync(inspect.Id, cancellationToken).ConfigureAwait(false);
-            return stats.HasLiveData ? stats : null;
-        }
-        catch (DockerContainerNotFoundException)
-        {
-            // The container stopped and was removed between the inspect and the sample.
-            return null;
-        }
-        catch (DockerApiException)
-        {
-            // The container stopped between the inspect and the sample; treat it as having no live data.
-            return null;
-        }
+        // Null when the container stopped or was removed after the inspect; treat it as having no live data.
+        var stats = await _containers.TryGetStatsAsync(inspect.Id, cancellationToken).ConfigureAwait(false);
+        return stats is { HasLiveData: true } ? stats : null;
     }
 
     private static CpuThrottlingReport BuildCpuThrottlingReport(ContainerInspectResult inspect, ContainerStats stats)

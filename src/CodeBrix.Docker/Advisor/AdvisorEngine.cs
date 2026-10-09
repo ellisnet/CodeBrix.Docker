@@ -134,14 +134,7 @@ public sealed class AdvisorEngine
             return null;
         }
 
-        try
-        {
-            return await _containers.GetStatsAsync(inspect.Id, cancellationToken).ConfigureAwait(false);
-        }
-        catch (DockerApiException)
-        {
-            // The container stopped between the inspect and the sample; the configuration rules still apply.
-            return null;
-        }
+        // Null when the container stopped or was removed after the inspect; the configuration rules still apply.
+        return await _containers.TryGetStatsAsync(inspect.Id, cancellationToken).ConfigureAwait(false);
     }
 }

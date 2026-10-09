@@ -152,7 +152,8 @@ public sealed class ContainerArchiveTests(DockerTestFixture fixture)
 
             //Assert
             modes.Should().Contain("644 /srv/README.txt");
-            modes.Should().Contain("755 /srv/run.sh");
+            // A Windows host has no execute bit to read, and ".sh" is not in ExecutableExtensions here.
+            modes.Should().Contain(OperatingSystem.IsWindows() ? "644 /srv/run.sh" : "755 /srv/run.sh");
         }
         finally
         {

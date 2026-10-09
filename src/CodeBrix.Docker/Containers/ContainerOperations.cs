@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -251,6 +252,47 @@ public sealed partial class ContainerOperations
     /// </remarks>
     public Task<ContainerStats> GetStatsAsync(string idOrName, CancellationToken cancellationToken = default) =>
         _api.GetAsync<ContainerStats>($"containers/{Reference(idOrName)}/stats?stream=false", cancellationToken);
+
+    /// <summary>
+    /// Takes a single sample as <see cref="GetStatsAsync"/> does, but returns <see langword="null"/> rather
+    /// than throwing when the container stops or is removed before or while the daemon samples it.
+    /// </summary>
+    /// <param name="idOrName">The container id or name.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The sample, or <see langword="null"/> when the container went away.</returns>
+    /// <remarks>
+    /// The sampling second is a real window: a container removed inside it ends the response with a 200
+    /// and an EMPTY body rather than a 404 (observed on Engine 29.8.2), which <see cref="GetStatsAsync"/>
+    /// reports as a plain <see cref="DockerException"/>.
+    /// </remarks>
+    internal async Task<ContainerStats> TryGetStatsAsync(string idOrName, CancellationToken cancellationToken)
+    {
+        var path = $"containers/{Reference(idOrName)}/stats?stream=false";
+        string json;
+        try
+        {
+            json = await _api.GetStringAsync(path, cancellationToken).ConfigureAwait(false);
+        }
+        catch (DockerApiException)
+        {
+            // Gone, or no longer running, before the daemon began sampling.
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            return DockerJson.Deserialize<ContainerStats>(json);
+        }
+        catch (JsonException ex)
+        {
+            throw new DockerException($"Could not parse the Docker API response for '{path}': {ex.Message}", ex);
+        }
+    }
 
     /// <summary>
     /// Streams resource-usage samples roughly once per second until cancelled or the container stops.

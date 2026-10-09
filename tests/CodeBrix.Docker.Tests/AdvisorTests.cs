@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using SilverAssertions;
 using Xunit;
 
 namespace CodeBrix.Docker.Tests;
@@ -231,6 +232,35 @@ public sealed class AdvisorTests(DockerTestFixture fixture)
             Assert.NotEmpty(mine);
             Assert.Contains("CB001", mine.Select(finding => finding.RuleId));
             Assert.All(findings, finding => Assert.DoesNotContain('/', finding.ContainerName));
+        }
+        finally
+        {
+            await fixture.RemoveContainerQuietlyAsync(id);
+        }
+    }
+
+    [Fact]
+    public async Task AnalyzeContainerAsync_WhenTheContainerIsRemovedMidSample_StillReportsTheConfigurationRules()
+    {
+        //Arrange
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        var spec = fixture.Spec("advisorgone", "busybox:latest", "sleep", "300");
+        string id = null;
+
+        try
+        {
+            id = await Client.Containers.RunAsync(spec, cancellation.Token);
+
+            //Act
+            // The live sample takes the daemon about a second, and a container removed inside that window
+            // ends the stats response with a 200 and an empty body.
+            var analysis = Client.Advisor.AnalyzeContainerAsync(id, cancellation.Token);
+            await Task.Delay(TimeSpan.FromMilliseconds(300), cancellation.Token);
+            await Client.Containers.RemoveAsync(id, force: true, cancellationToken: cancellation.Token);
+            var findings = await analysis;
+
+            //Assert
+            findings.Select(finding => finding.RuleId).Should().Contain("CB001");
         }
         finally
         {
