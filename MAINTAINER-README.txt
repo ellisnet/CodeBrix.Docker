@@ -50,7 +50,16 @@ REPOSITORY LAYOUT
                                      QueryStringBuilder, JsonEmptyObject
       Containers/                    ContainerOperations plus every container
                                      DTO: specs, inspect, summaries, stats,
-                                     exec types, MultiplexedStreamReader
+                                     exec types, MultiplexedStreamReader.
+                                     ContainerOperations.Archive.cs is the
+                                     partial holding the copy-in/copy-out API
+      Archive/                       the copy-in/copy-out types: the public
+                                     options, results, CopyProgress and
+                                     ContainerPathStat, plus the internal
+                                     ContainerArchiveWriter (tar builder),
+                                     ContainerArchiveExtractor (tar reader and
+                                     path-escape guard), ExcludeMatcher and
+                                     ArchiveContent (the streamed request body)
       Images/                        ImageOperations and image DTOs, including
                                      the CLI-backed BuildKit build path
       Networks/                      NetworkOperations and DTOs
@@ -122,16 +131,29 @@ to build only the library while someone else is working in samples/:
 TESTING
 =======
     tests/CodeBrix.Docker.Tests -- xunit.v3 4.0.0, xunit.runner.visualstudio
-    4.0.0, Microsoft.NET.Test.Sdk 18.9.0 and SilverAssertions. Sixteen test
-    classes, 98 test members, 102 test cases (one [Theory] contributes five).
+    4.0.0, Microsoft.NET.Test.Sdk 18.9.0 and SilverAssertions. One test class
+    per file; the current totals are recorded under THE ENVIRONMENT GATE below.
 
 THIS IS AN INTEGRATION SUITE, NOT A UNIT SUITE. It requires a running Docker
 daemon and does real work against it: it pulls busybox:latest, alpine:latest,
 alpine:3.19 and nginx:alpine at startup, builds images, starts containers,
 creates networks and volumes, and provokes real OOM kills and real CPU
-throttling. Two small classes are the exception and need no daemon at all --
-PidsStatsTests (wire-level converter behaviour) and AnalysisOperationsTests
-(argument-shape and reference-splitting behaviour).
+throttling. Four small classes are the exception and need no daemon at all --
+PidsStatsTests (wire-level converter behaviour), AnalysisOperationsTests
+(argument-shape and reference-splitting behaviour), ContainerArchiveWriterTests
+(exclusion globs and mode selection for copies into a container) and
+ContainerArchiveExtractorTests (the path-escape guard, root stripping,
+overwrite and cancellation of copies out of a container, fed archives built in
+memory, because a stock daemon never produces a hostile archive).
+
+ContainerArchiveTests is the live half of the copy-in/copy-out API. It builds a
+small tree per test in a temporary directory (nested folders, a 0755 script, a
+1 MB random file, an excluded target/ folder and a relative symbolic link),
+copies it into created and running alpine containers, checks content with
+sha256sum and modes with stat inside the container, round-trips it back out,
+moves 50 MB each way, maps every error case, and cancels mid-transfer. Its
+containers carry the usual label; its host directories are TempDirectory
+instances and are deleted on dispose.
 
 HOW TO RUN IT
 -------------
@@ -177,9 +199,10 @@ THE ENVIRONMENT GATE
 gates EXACTLY ONE test -- SlimTests.OptimizeImageAsync_ProducesASmallerImage --
 through Infrastructure/EnvGatedFactAttribute.cs, a FactAttribute subclass that
 sets Skip unless the named variable equals the expected value. Nothing else in
-the suite is gated. The default run is therefore 114 total / 113 passed / 1
-skipped; with the gate open it is 114 / 114 / 0 (counts from 2026-09-15, after
-the ResolveSlimImage theories were added).
+the suite is gated. The default run is therefore 146 total / 145 passed / 1
+skipped; with the gate open it should be 146 / 146 / 0 (counts from 2026-10-08,
+after the copy-in/copy-out tests were added; the gated run was not repeated
+then).
 
 TREAT THE GATED RUN AS PART OF A RELEASE CHECK, NOT AN OPTIONAL EXTRA. That
 single test is what caught a shipped library defect that had never been
@@ -252,7 +275,7 @@ ENVIRONMENT ASSUMPTIONS THAT ARE EASY TO BREAK
 
   - OOM TESTS NEED SWAP ACCOUNTING. `docker info` must report SwapLimit: true.
     Without it the daemon cannot enforce memory-swap limits and the OOM tests
-    become flaky or never fire.
+    become flaky or never trigger.
 
   - THE OOM TRIGGER IS A TMPFS FILL, NOT `tail /dev/zero`. BusyBox's tail caps
     its own read-ahead buffer, so it exits 1 with OOMKilled false. The suite
@@ -531,7 +554,7 @@ whether a given daemon backfills the field:
 
 (No output means no backfill, and the pairing above is what keeps Slim working.)
 
-ContainerSpec.NetworkMode is new and additive: null leaves HostConfig.NetworkMode
+ContainerSpec.NetworkMode is additive: null leaves HostConfig.NetworkMode
 unset, so every existing caller is unaffected.
 
 WHICH MINT IMAGE RUNS, AND WHY IT DEPENDS ON THE DAEMON
@@ -746,8 +769,45 @@ OTHER DELIBERATE DESIGN CHOICES, SO THEY ARE NOT MISTAKEN FOR OVERSIGHTS
 
   - Advisor rules that need live counters are SKIPPED, not failed, for stopped
     containers (CB005, CB006, CB013). CB013 additionally requires at least 4 MB
-    of page cache so it does not fire on idle containers whose few hundred
+    of page cache so it does not match on idle containers whose few hundred
     kilobytes of cache technically dominate their usage.
+
+COPYING FILES: WHY AN UPLOAD FAILURE IS DIAGNOSED AFTERWARDS
+-----------------------------------------------------------
+PUT /containers/{id}/archive validates the container and the destination
+BEFORE it reads the request body, and when it refuses it answers and closes the
+connection at once. An archive larger than the socket buffers is therefore cut
+off mid-send, and SocketsHttpHandler surfaces a broken pipe (an
+HttpRequestException inside the usual DockerException) instead of the daemon's
+404 or 400. Sending "Expect: 100-continue" does NOT help: the daemon answers
+"100 Continue" immediately, before its handler has looked at anything (checked
+with curl on Engine 29.8.2). So ContainerOperations.Archive.cs catches a
+transport failure on a PUT and repeats the checks with body-less requests --
+HEAD on the destination (missing container, missing path, not a directory),
+then an inspect for a read-only mount or root file system -- and throws the
+reason; if none of those explains it, the original failure is rethrown.
+Successful copies pay nothing for this. Note too that on Engine 29.8 a
+read-only volume or bind mount answers 400 ("mounted volume is marked
+read-only"), not the 403 the API reference documents; both are mapped.
+
+The archive endpoints' 404 is ambiguous (container or path), and a HEAD
+response has no body to tell them apart, so TranslateArchiveFailureAsync looks
+the container up when the body does not say. A missing path is deliberately a
+plain DockerApiException with StatusCode NotFound, not
+DockerContainerNotFoundException.
+
+The outgoing archive is produced by ArchiveContent, an HttpContent whose
+SerializeToStreamAsync runs a TarWriter straight onto the request stream
+(chunked transfer encoding). No Pipe and no producer task are needed, nothing
+is buffered, and cancellation reaches the writer through the token HttpClient
+passes in. CopyToContainerAsync wraps the caller's stream the same way rather
+than in a StreamContent, because the request message disposes its content and
+a StreamContent would close the caller's stream.
+
+The two `docker cp` steps in AnalysisOperations (Dive's report out, Hadolint's
+Dockerfile in) could now use CopyFromContainerAsync and CopyFileToContainerAsync
+and drop their dependency on the docker executable. They were deliberately left
+alone when the API was added; switching them is a separate change.
 
 THE AI-AGENT POINTER STUBS
 --------------------------

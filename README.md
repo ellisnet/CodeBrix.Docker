@@ -38,6 +38,7 @@ runs the operating system's own SSH client rather than referencing an SSH librar
 * Container lifecycle - create, run, start, stop, restart, remove, wait, list and inspect
 * Typed `ResourceLimits` - CPUs, cpuset, CPU shares, memory, memory reservation, swap and PID limits - set at creation and retuned while the container runs
 * Command execution inside a running container: one-shot exec, or a live interactive session with standard input, a pseudo-terminal and resize
+* Copying files and folders into and out of containers - streamed tar archives with exclusion globs, Unix modes, symlink handling, progress and a path-escape guard on extraction - with no `docker` executable needed
 * Log retrieval with the Docker stream framing already decoded, and live statistics as a single sample or a stream
 * Image pull with progress, build (BuildKit via the CLI), tag, inspect, history, list, remove and prune
 * Networks (including aliases), volumes, daemon information and disk usage, and the daemon's event stream

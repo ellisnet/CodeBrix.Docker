@@ -110,3 +110,78 @@ internal sealed class TempDirectory : IDisposable
         }
     }
 }
+
+/// <summary>
+/// A read-only stream that cancels a token source once a given number of bytes has been read from it,
+/// so that a test can cancel an operation part way through a transfer without relying on timing.
+/// </summary>
+internal sealed class CancelAfterBytesStream(Stream inner, long threshold, CancellationTokenSource source) : Stream
+{
+    private long _read;
+
+    /// <inheritdoc />
+    public override bool CanRead => true;
+
+    /// <inheritdoc />
+    public override bool CanSeek => false;
+
+    /// <inheritdoc />
+    public override bool CanWrite => false;
+
+    /// <inheritdoc />
+    public override long Length => throw new NotSupportedException();
+
+    /// <inheritdoc />
+    public override long Position
+    {
+        get => throw new NotSupportedException();
+        set => throw new NotSupportedException();
+    }
+
+    /// <inheritdoc />
+    public override void Flush()
+    {
+    }
+
+    /// <inheritdoc />
+    public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
+
+    /// <inheritdoc />
+    public override int Read(Span<byte> buffer)
+    {
+        var read = inner.Read(buffer[..(int)Math.Min(buffer.Length, 64 * 1024)]);
+        Advance(read);
+        return read;
+    }
+
+    /// <inheritdoc />
+    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var read = await inner.ReadAsync(buffer[..(int)Math.Min(buffer.Length, 64 * 1024)], cancellationToken);
+        Advance(read);
+        return read;
+    }
+
+    /// <inheritdoc />
+    public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+        ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+    /// <inheritdoc />
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+    /// <inheritdoc />
+    public override void SetLength(long value) => throw new NotSupportedException();
+
+    /// <inheritdoc />
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+    private void Advance(int read)
+    {
+        _read += read;
+        if (_read >= threshold && !source.IsCancellationRequested)
+        {
+            source.Cancel();
+        }
+    }
+}

@@ -10,7 +10,7 @@ namespace CodeBrix.Docker;
 /// <summary>
 /// Container lifecycle, resource and inspection operations.
 /// </summary>
-public sealed class ContainerOperations
+public sealed partial class ContainerOperations
 {
     private readonly DockerApiClient _api;
 

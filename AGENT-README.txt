@@ -17,9 +17,10 @@ There are three tiers of capability, and they build on one another:
   1. LIFECYCLE -- containers, images, networks, volumes, daemon information and
      events, typed resource limits (CPU, memory, swap, PIDs) that can be set at
      creation and retuned while the container runs, log retrieval with the
-     Docker stream framing already decoded, and command execution inside a
+     Docker stream framing already decoded, command execution inside a
      running container -- one-shot, or as a live interactive terminal session
-     with standard input, a pseudo-terminal and resize.
+     with standard input, a pseudo-terminal and resize -- and copying files and
+     folders into and out of containers, streamed as tar archives.
 
   2. DIAGNOSTICS -- the questions you actually ask when a container misbehaves.
      Is the CPU limit throttling it, and by how much? Was it killed by the
@@ -109,10 +110,10 @@ KEY NAMESPACES / USINGS
     using CodeBrix.Docker;   // EVERY public type in the package
 
 That is the whole story. The library declares exactly ONE namespace,
-CodeBrix.Docker, and every one of its ninety public types lives in it. The
-folders you see in the repository (Containers/, Images/, Diagnostics/,
-Advisor/, Analysis/, Transport/, Client/, Common/, Cli/, Networks/, Volumes/,
-System/) are FILE ORGANIZATION ONLY. They are not namespaces.
+CodeBrix.Docker, and every one of its ninety-six public types lives in it. The
+folders you see in the repository (Containers/, Archive/, Images/,
+Diagnostics/, Advisor/, Analysis/, Transport/, Client/, Common/, Cli/,
+Networks/, Volumes/, System/) are FILE ORGANIZATION ONLY. They are not namespaces.
 
   - There is no CodeBrix.Docker.Containers, no CodeBrix.Docker.Diagnostics and
     no CodeBrix.Docker.Analysis namespace. Writing
@@ -504,6 +505,31 @@ EXECUTION
         string execId, CancellationToken cancellationToken = default)
         Where the exit code of a streaming exec comes from.
 
+FILES (see COPYING FILES IN AND OUT below)
+
+    Task CopyDirectoryToContainerAsync(string idOrName, string hostDirectory,
+        string containerPath, CopyToContainerOptions options = null,
+        CancellationToken cancellationToken = default)
+
+    Task CopyFileToContainerAsync(string idOrName, string hostFilePath,
+        string containerDirectory, CopyToContainerOptions options = null,
+        CancellationToken cancellationToken = default)
+
+    Task<CopyFromContainerResult> CopyFromContainerToDirectoryAsync(
+        string idOrName, string containerPath, string hostDirectory,
+        CopyFromContainerOptions options = null,
+        CancellationToken cancellationToken = default)
+
+    Task CopyToContainerAsync(string idOrName, Stream tarStream,
+        string containerPath, CopyToContainerOptions options = null,
+        CancellationToken cancellationToken = default)
+
+    Task<Stream> CopyFromContainerAsync(string idOrName, string containerPath,
+        CancellationToken cancellationToken = default)
+
+    Task<ContainerPathStat> StatPathAsync(string idOrName,
+        string containerPath, CancellationToken cancellationToken = default)
+
 
 THE CONTAINER SPECIFICATION
 ---------------------------
@@ -526,6 +552,7 @@ and `Mounts = { MountSpec.Volume(...) }` collection-initializer syntax works.
         public IList<PortBinding>          ExposedPorts { get; set; } = [];  // expose only
         public IList<MountSpec>            Mounts       { get; set; } = [];
         public string                      NetworkName  { get; set; }
+        public string                      NetworkMode  { get; set; }   // host | none
         public IList<string>               NetworkAliases { get; set; } = [];
         public RestartPolicy               RestartPolicy { get; set; }
         public bool                        AutoRemove   { get; set; }
@@ -535,6 +562,12 @@ and `Mounts = { MountSpec.Volume(...) }` collection-initializer syntax works.
         public IDictionary<string, string> LogOptions   { get; set; } = ...;
         public ResourceLimits              Limits       { get; set; }
     }
+
+NetworkName attaches the container to a user-defined network at creation time.
+NetworkMode is the daemon-level HostConfig.NetworkMode, for the built-in "host"
+and "none" modes; null or blank (the default) leaves the daemon's own default
+(bridge) in place. ContainerHostConfig.NetworkMode on an inspected container
+reports it back.
 
 MountSpec is constructed only through its three factory methods; it has no
 public constructor:
@@ -1031,6 +1064,181 @@ sends the zero-length message the daemon reads as end of file. Still check
 CanCloseStandardInput first -- it is a per-connection capability, and a pipe
 that is not in message mode cannot carry the signal, so the call throws
 NotSupportedException there and the session must be disposed instead.
+
+
+COPYING FILES IN AND OUT
+------------------------
+Six ContainerOperations methods move files over the Engine API's
+/containers/{id}/archive endpoint, which speaks tar. No `docker` executable is
+involved. The container may be running, created-but-not-started, or (for
+reading) stopped. Two levels are offered:
+
+  CONVENIENCE -- host folders and files; the library builds and reads the tar.
+
+    CopyDirectoryToContainerAsync(id, hostDirectory, containerPath, options)
+        Copies the CONTENTS of hostDirectory into containerPath, or the folder
+        itself when options.IncludeRootFolder is true (src -> /work/src/...).
+    CopyFileToContainerAsync(id, hostFilePath, containerDirectory, options)
+        One file, keeping its name.
+    CopyFromContainerToDirectoryAsync(id, containerPath, hostDirectory, options)
+        -> CopyFromContainerResult. Extracts a file or folder into
+        hostDirectory (created when missing).
+
+  STREAM LEVEL -- you own the tar.
+
+    CopyToContainerAsync(id, tarStream, containerPath, options)
+        Sends YOUR archive, read once from its current position and not
+        disposed. Only options.NoOverwriteDirNonDir and options.CopyUidGid
+        apply.
+    CopyFromContainerAsync(id, containerPath) -> Stream
+        The raw tar off the connection. YOU dispose it.
+    StatPathAsync(id, containerPath) -> ContainerPathStat
+        Describes a path without transferring content (a symbolic link is
+        described, not followed).
+
+Nothing is buffered in memory in either direction: the outgoing archive is
+written onto the connection while it is being built, and the incoming one is
+extracted as it is read. No timeout applies to the transfers (StatPathAsync
+does use DefaultTimeout); bound them with your CancellationToken.
+
+THE DESTINATION MUST BE AN EXISTING DIRECTORY. The daemon extracts INTO a
+directory and will not create it. Make it first, for example with
+ExecAsync(id, ["mkdir", "-p", "/work"]) on a running container, or copy into a
+directory the image already has.
+
+THE ARCHIVE'S ROOT ENTRY IS THE LAST SEGMENT OF THE PATH YOU READ. Reading
+/srv/app yields app/, app/x, ...; reading /etc/hosts yields the single entry
+hosts. So CopyFromContainerToDirectoryAsync(id, "/srv/app", "out") produces
+out/app/x. Set CopyFromContainerOptions.StripRootFolder = true to get out/x
+instead (it has no effect when the path is a file).
+
+    public sealed class CopyToContainerOptions
+    {
+        public IList<string>         ExcludePatterns      { get; set; } = [];
+        public bool                  IncludeRootFolder    { get; set; }
+        public UnixFileMode          DefaultFileMode      { get; set; }  // 0644
+        public UnixFileMode          DefaultDirectoryMode { get; set; }  // 0755
+        public UnixFileMode?         ExecutableFileMode   { get; set; }  // 0755
+        public IList<string>         ExecutableExtensions { get; set; } = [];
+        public bool                  PreserveUnixModes    { get; set; }  // [1]
+        public bool                  NoOverwriteDirNonDir { get; set; }
+        public bool                  CopyUidGid           { get; set; }
+        public bool                  FollowSymlinks       { get; set; }
+        public IProgress<CopyProgress> Progress           { get; set; }
+    }
+    [1] defaults to true on every host except Windows
+
+  - ExcludePatterns are globs matched against each path relative to the host
+    folder, with forward slashes. No slash in the pattern: matches a name at
+    any depth ("target", "*.log"). A slash: anchored at the host folder
+    ("build/output", "docs/**/*.tmp"). A trailing slash: directories only.
+    "*" and "?" stay inside one segment, "**" crosses segments. An excluded
+    folder is skipped whole. Case sensitive. EMPTY BY DEFAULT -- nothing is
+    excluded unless you say so; pass ".git", "target", "node_modules" and the
+    like yourself.
+  - Modes. On a Unix host PreserveUnixModes is true and each entry carries its
+    own host mode verbatim. Otherwise (a Windows host, or PreserveUnixModes
+    false) files get DefaultFileMode and directories DefaultDirectoryMode,
+    and a file recognised as executable gets ExecutableFileMode: on Unix a
+    file with any execute bit, on any host a file whose extension is in
+    ExecutableExtensions (".sh" or "sh", case insensitive). That list is how a
+    Windows host gets a runnable script into a container. ExecutableFileMode
+    null gives executables DefaultFileMode too.
+  - Entries always carry uid and gid 0; CopyUidGid asks the daemon to apply
+    them rather than choosing ownership itself.
+  - FollowSymlinks false (default): a host symbolic link is archived AS a link,
+    its target text unchanged. True: the target is copied as an ordinary file
+    or folder; a folder already visited is not entered twice, and a link that
+    cannot be resolved is still archived as a link.
+  - Only regular files, folders and symbolic links are archived. Pipes,
+    sockets and device nodes are skipped.
+  - Paths inside the archive always use '/', whatever the host.
+
+    public sealed class CopyFromContainerOptions
+    {
+        public bool                    StripRootFolder { get; set; }
+        public bool                    Overwrite       { get; set; } = true;
+        public bool                    ApplyUnixModes  { get; set; }  // [1]
+        public bool                    SkipSymlinks    { get; set; } = true;
+        public IProgress<CopyProgress> Progress        { get; set; }
+    }
+
+  - Overwrite false leaves existing host files alone and lists them in
+    SkippedEntries.
+  - ApplyUnixModes applies each entry's mode to what is written (folders
+    last, so a read-only folder does not block its own contents). It is
+    ignored on Windows; the modes are still RECORDED in CopiedEntry.Mode.
+    Modification times are applied on every host.
+  - SkipSymlinks true (default) skips every link. False recreates a link only
+    when its target is RELATIVE and resolves inside hostDirectory; any other
+    link is skipped. Skipped links are listed in SkippedEntries.
+  - Hard links are written as independent copies. Device and pipe nodes are
+    skipped and listed.
+  - A file being written when the copy fails or is cancelled is deleted, not
+    left half-written. Files already finished stay where they are.
+
+    public sealed class CopyFromContainerResult
+    {
+        public IReadOnlyList<CopiedEntry> Entries        { get; }  // in order
+        public long                       TotalBytes     { get; }
+        public int                        FileCount      { get; }
+        public int                        DirectoryCount { get; }
+        public IReadOnlyList<string>      SkippedEntries { get; }  // tar names
+    }
+
+    public sealed record CopiedEntry(string ContainerPath, string HostPath,
+        long Size, UnixFileMode Mode, bool IsDirectory, bool IsExecutable);
+
+    public sealed record CopyProgress(long FilesCopied, long BytesCopied,
+        string CurrentPath);
+
+    public sealed record ContainerPathStat(string Name, long Size, uint Mode,
+        DateTimeOffset Modified, string LinkTarget)
+    {
+        public bool         IsDirectory    { get; }
+        public bool         IsSymlink      { get; }
+        public bool         IsRegularFile  { get; }
+        public UnixFileMode PermissionBits { get; }
+    }
+
+ContainerPathStat.Mode is the daemon's raw Go os.FileMode word: the type flags
+live in the high bits (directory 1<<31, symbolic link 1<<27). Use the four
+helpers instead of decoding it; PermissionBits translates the permission,
+set-user-id, set-group-id and sticky bits into UnixFileMode. Progress reports
+arrive once per regular file; CurrentPath is the archive path when sending and
+the host-relative path when receiving. Progress<T> posts its callbacks
+asynchronously, so the last few may land after the copy's Task completes; use
+a synchronous IProgress<T> when you need every report before you continue.
+
+SECURITY: CopyFromContainerToDirectoryAsync refuses any entry whose path would
+land outside hostDirectory -- an absolute name, a drive letter, a ".." that
+climbs out, or a path through an existing symbolic link that leads outside --
+and throws a plain DockerException naming the offending entry. Nothing is
+written for that entry or after it; earlier entries stay. A stock daemon does
+not produce such archives, but a compromised container's file system could.
+
+ERRORS. The daemon answers 404 for a missing container AND for a missing path;
+the library tells them apart:
+
+    container missing          DockerContainerNotFoundException
+    path missing               DockerApiException, StatusCode NotFound (NOT the
+                               container subclass), message names the path
+    destination not a          DockerApiException, StatusCode BadRequest
+    directory, on a read-only
+    mount, or on a read-only
+    root file system
+    host folder / file missing DirectoryNotFoundException or
+                               FileNotFoundException, before any request
+
+When the daemon refuses an upload it closes the connection at once, which cuts
+a large archive off mid-send. The library then repeats the checks with
+body-less requests and throws the reason above, not the broken pipe.
+
+WINDOWS HOSTS. Sending: there are no host modes to read, so every entry's mode
+comes from the options -- DefaultFileMode, DefaultDirectoryMode, and
+ExecutableFileMode for extensions in ExecutableExtensions. Receiving: modes
+are recorded in CopiedEntry.Mode but not applied, and creating a symbolic link
+needs the privilege to do so (without it the link is skipped and listed).
 
 
 IMAGES: ImageOperations
@@ -1549,10 +1757,10 @@ ADVISOR: AdvisorEngine
 
     public enum AdvisorSeverity { Info = 0, Warning = 1, Critical = 2 }
 
-A rule that does not fire contributes nothing, so an empty list means a clean
+A rule that does not match contributes nothing, so an empty list means a clean
 bill of health. The rules themselves are internal; you cannot register your own.
 
-    Id     Severity        Fires when
+    Id     Severity        Raised when
     -----  --------------  --------------------------------------------------
     CB001  Warning         No memory limit set (HostConfig.Memory == 0)
     CB002  Warning         Memory limit set but swap is not disabled
@@ -2617,6 +2825,143 @@ The transport's own message is what surfaces, not a generic "an error occurred
 while sending the request". Show it to the user; it is written to be actionable.
 
 
+Example 18: Copy a source tree in, build inside, copy the output back out
+-------------------------------------------------------------------------
+
+    // projectDir holds build.sh (mode 0755), src/main.txt, .git/ and target/.
+    using var client = DockerClient.Create();
+
+    var id = await client.Containers.RunAsync(new ContainerSpec
+    {
+        Image = "alpine:latest",
+        Name = "readme-copy",
+        Command = ["sleep", "300"],
+    });
+
+    try
+    {
+        // The destination must exist: the endpoint extracts INTO a directory.
+        await client.Containers.ExecAsync(id, ["mkdir", "-p", "/work"]);
+
+        await client.Containers.CopyDirectoryToContainerAsync(id, projectDir,
+            "/work", new CopyToContainerOptions
+            {
+                ExcludePatterns = { ".git", "target", "node_modules" },
+                ExecutableExtensions = { ".sh" },  // consulted on Windows hosts
+                Progress = new Progress<CopyProgress>(p => Console.WriteLine(
+                    $"  sent {p.FilesCopied} file(s), {p.BytesCopied} bytes: " +
+                    p.CurrentPath)),
+            });
+
+        var build = await client.Containers.ExecAsync(id, ["./build.sh"],
+            workingDir: "/work");
+        Console.WriteLine($"build exit code: {build.ExitCode}");
+
+        var result = await client.Containers.CopyFromContainerToDirectoryAsync(
+            id, "/work/out", outputDir,
+            new CopyFromContainerOptions { StripRootFolder = true });
+
+        foreach (var entry in result.Entries)
+        {
+            Console.WriteLine($"  {entry.ContainerPath} -> " +
+                $"{Path.GetFileName(entry.HostPath)} ({entry.Size} bytes)");
+        }
+
+        var report = File.ReadAllText(Path.Combine(outputDir, "report.txt"));
+        Console.WriteLine($"{result.FileCount} file(s), {result.TotalBytes} " +
+                          $"bytes; report: {report.Trim()}");
+    }
+    finally
+    {
+        await client.Containers.RemoveAsync(id, force: true);
+    }
+
+    //   sent 1 file(s), 74 bytes: build.sh
+    //   sent 2 file(s), 80 bytes: src/main.txt
+    // build exit code: 0
+    //   /work/out/report.txt -> report.txt (15 bytes)
+    // 1 file(s), 15 bytes; report: 6 src/main.txt
+
+build.sh arrived executable because a Unix host's own modes are preserved.
+With StripRootFolder the contents of /work/out land directly in outputDir;
+without it they would be in outputDir/out.
+
+
+Example 19: Inspect a path, send your own tar, read the raw stream back
+-----------------------------------------------------------------------
+This one also needs `using System.Formats.Tar;`.
+
+    using var client = DockerClient.Create();
+    var id = await client.Containers.CreateAsync(new ContainerSpec
+    {
+        Image = "alpine:latest",
+        Command = ["sleep", "300"],
+    });
+
+    try
+    {
+        var stat = await client.Containers.StatPathAsync(id, "/etc/passwd");
+        Console.WriteLine($"{stat.Name}: {stat.Size} bytes, " +
+            $"regular={stat.IsRegularFile}, " +
+            $"mode={Convert.ToString((int)stat.PermissionBits, 8)}");
+
+        var link = await client.Containers.StatPathAsync(id, "/bin/sh");
+        Console.WriteLine($"/bin/sh: symlink={link.IsSymlink} -> " +
+                          link.LinkTarget);
+
+        try
+        {
+            await client.Containers.StatPathAsync(id, "/no/such/file");
+        }
+        catch (DockerApiException ex)
+            when (ex is not DockerContainerNotFoundException)
+        {
+            Console.WriteLine($"missing path: {ex.StatusCode} -- {ex.Message}");
+        }
+
+        // A caller-built archive: one generated file, extracted into /tmp.
+        using var archive = new MemoryStream();
+        await using (var writer = new TarWriter(archive, TarEntryFormat.Pax,
+                         leaveOpen: true))
+        {
+            await writer.WriteEntryAsync(
+                new PaxTarEntry(TarEntryType.RegularFile, "settings.json")
+                {
+                    Mode = UnixFileMode.UserRead | UnixFileMode.UserWrite
+                           | UnixFileMode.GroupRead,
+                    DataStream = new MemoryStream(
+                        Encoding.UTF8.GetBytes("{\"debug\":true}")),
+                });
+        }
+
+        archive.Position = 0;
+        await client.Containers.CopyToContainerAsync(id, archive, "/tmp");
+
+        // The raw stream back out: the root entry is the path's last segment.
+        await using var tar = await client.Containers.CopyFromContainerAsync(
+            id, "/tmp/settings.json");
+        await using var reader = new TarReader(tar);
+        while (await reader.GetNextEntryAsync() is { } entry)
+        {
+            Console.WriteLine($"entry {entry.Name}, {entry.Length} bytes, " +
+                $"mode {Convert.ToString((int)entry.Mode, 8)}");
+        }
+    }
+    finally
+    {
+        await client.Containers.RemoveAsync(id, force: true);
+    }
+
+    // passwd: 702 bytes, regular=True, mode=644
+    // /bin/sh: symlink=True -> /bin/busybox
+    // missing path: NotFound -- The path '/no/such/file' does not exist in
+    //   container '0575f91df86e...'.
+    // entry settings.json, 14 bytes, mode 640
+
+The container was never started: copying and inspecting work on a created
+container, which is how you seed configuration before its first start.
+
+
 ================================================================================
 
 MINIMUM VIABLE PROJECT TEMPLATE
@@ -2764,7 +3109,7 @@ COMMON PITFALLS TO AVOID
 
 1. DO NOT confuse the package id with the namespace.
    Package  : CodeBrix.Docker.MitLicenseForever
-   Namespace: CodeBrix.Docker  (one namespace, all ninety public types)
+   Namespace: CodeBrix.Docker  (one namespace, all ninety-six public types)
 
 2. DO NOT write "using CodeBrix.Docker.Containers;" or
    "using CodeBrix.Docker.Diagnostics;" or "using CodeBrix.Docker.Analysis;".
@@ -2913,7 +3258,16 @@ COMMON PITFALLS TO AVOID
     DockerContainerNotFoundException, which is correct but is easy to mistake
     for a transport problem.
 
-26. DO NOT target .NET versions below 10.0.
+26. DO NOT copy into a container path that does not exist yet, and do not
+    forget the root folder on the way out. The archive endpoint extracts INTO
+    an existing directory (a missing one is a DockerApiException with
+    StatusCode NotFound, not DockerContainerNotFoundException), and reading
+    /srv/app into "out" produces out/app/..., not out/... -- set
+    CopyFromContainerOptions.StripRootFolder for the latter. ExcludePatterns
+    is empty by default, so a copied source tree takes .git and build output
+    with it unless you exclude them.
+
+27. DO NOT target .NET versions below 10.0.
 
 
 ================================================================================
@@ -2944,10 +3298,6 @@ Do NOT reach for this package to:
     catalogue browsing and no credential storage. PullAsync falls back to the
     `docker` CLI precisely so that the machine's existing credential helpers do
     that job.
-
-  - Copy files into or out of containers as a public API. There is no
-    CopyToContainerAsync or archive export. (The analysis tier uses `docker cp`
-    internally, but that is not exposed.)
 
   - Attach to a container's main process. There is no attach API; exec is the
     way in, and it starts a NEW process in the container.
@@ -2981,9 +3331,9 @@ This package IS for: managing the full lifecycle of Linux containers, images,
 networks and volumes on one Docker daemon (local, TCP, or remote over SSH);
 setting and retuning typed resource limits; reading logs, live statistics and
 daemon events; running commands inside containers one-shot or as a live
-interactive terminal; diagnosing throttling, OOM kills, memory composition and
-health; and analysing containers and images for configuration and security
-problems.
+interactive terminal; copying files and folders into and out of containers;
+diagnosing throttling, OOM kills, memory composition and health; and analysing
+containers and images for configuration and security problems.
 
 
 ================================================================================
@@ -3005,6 +3355,11 @@ Feature-to-test-file map:
   Container lifecycle: run, create/start, stop, restart, kill, remove, wait,
   logs, exec, list and inspect, prune
     https://github.com/ellisnet/CodeBrix.Docker/blob/main/tests/CodeBrix.Docker.Tests/ContainerLifecycleTests.cs
+
+  Copying files in and out: folder trees with exclusions, modes and links,
+  single files, StatPathAsync, the raw tar stream, round trips, a 50 MB
+  transfer, error mapping and cancellation
+    https://github.com/ellisnet/CodeBrix.Docker/blob/main/tests/CodeBrix.Docker.Tests/ContainerArchiveTests.cs
 
   Typed resource limits, live retuning with UpdateResourcesAsync, and the
   OOM-kill path
@@ -3051,8 +3406,10 @@ To read one as plain text, swap the host for raw.githubusercontent.com:
 The repository also carries tests for the streaming exec API
 (ExecStreamTests.cs), the ssh:// transport and its containerised sshd harness
 (SshTransportTests.cs, Infrastructure/SshdTestHarness.cs), the PID-limit wire
-converter (PidsStatsTests.cs) and the analysis tool-image defaults
-(AnalysisOperationsTests.cs), all in the same tests/CodeBrix.Docker.Tests
+converter (PidsStatsTests.cs), the analysis tool-image defaults
+(AnalysisOperationsTests.cs), and -- without a daemon -- the copy path-escape
+guard (ContainerArchiveExtractorTests.cs) and the exclusion and mode rules
+(ContainerArchiveWriterTests.cs), all in the same tests/CodeBrix.Docker.Tests
 folder.
 
 A full sample application built on this package -- a Redis topology manager with
@@ -3067,7 +3424,7 @@ QUICK REFERENCE CARD
 ====================
 
 PACKAGE     CodeBrix.Docker.MitLicenseForever   (MIT; .NET 10+; zero dependencies)
-NAMESPACE   using CodeBrix.Docker;              (the only one; 90 public types)
+NAMESPACE   using CodeBrix.Docker;              (the only one; 96 public types)
 
 CLIENT      using var client = DockerClient.Create();
             DockerClient.Create(new DockerClientOptions { Endpoint = "...",
@@ -3098,7 +3455,8 @@ CONTAINERS  client.Containers
 
 SPEC        new ContainerSpec { Image = "...",            // the only required member
               Name, Command, Entrypoint, Env, Labels, User, WorkingDir, HostName,
-              PortBindings, ExposedPorts, Mounts, NetworkName, NetworkAliases,
+              PortBindings, ExposedPorts, Mounts, NetworkName, NetworkMode,
+              NetworkAliases,
               RestartPolicy, AutoRemove, Privileged, Healthcheck,
               LogDriver, LogOptions, Limits }
 MOUNTS      MountSpec.Volume(name, path, readOnly: false)
@@ -3134,6 +3492,23 @@ EXEC        .ExecAsync(id, ["sh", "-c", "..."], user, workingDir, env) -> ExecRe
             stream.ExecId / .IsTty / .UsesRawFraming / .CanCloseStandardInput
             .ResizeExecAsync(execId, rows, cols) / .InspectExecAsync(execId)
             missing shell -> no exception, exit code 127 on standard OUTPUT
+
+COPY        .CopyDirectoryToContainerAsync(id, hostDir, "/existing/dir",
+                new CopyToContainerOptions { ExcludePatterns = { ".git" },
+                IncludeRootFolder, DefaultFileMode, DefaultDirectoryMode,
+                ExecutableFileMode, ExecutableExtensions, PreserveUnixModes,
+                NoOverwriteDirNonDir, CopyUidGid, FollowSymlinks, Progress })
+            .CopyFileToContainerAsync(id, hostFile, "/existing/dir", options)
+            .CopyFromContainerToDirectoryAsync(id, "/path", hostDir,
+                new CopyFromContainerOptions { StripRootFolder, Overwrite,
+                ApplyUnixModes, SkipSymlinks, Progress })
+                -> CopyFromContainerResult
+            .CopyToContainerAsync(id, tarStream, "/existing/dir", options)
+            .CopyFromContainerAsync(id, "/path") -> Stream (tar; you dispose)
+            .StatPathAsync(id, "/path") -> ContainerPathStat
+                 .IsDirectory / .IsSymlink / .IsRegularFile / .PermissionBits
+            destination must exist; archive root = last path segment;
+            missing path -> DockerApiException 404 (not the container subclass)
 
 IMAGES      client.Images
             .PullAsync(reference, progress) / .RemoveAsync(ref, force)
