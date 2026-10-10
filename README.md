@@ -41,6 +41,7 @@ runs the operating system's own SSH client rather than referencing an SSH librar
 * Copying files and folders into and out of containers - streamed tar archives with exclusion globs, Unix modes, symlink handling, progress and a path-escape guard on extraction - with no `docker` executable needed
 * Log retrieval with the Docker stream framing already decoded, and live statistics as a single sample or a stream
 * Image pull with progress, build (BuildKit via the CLI), tag, inspect, history, list, remove and prune
+* BuildKit build-cache pruning (`docker builder prune`), which removing or pruning images never reclaims - engine-wide, bounded by age and kept-storage options
 * Networks (including aliases), volumes, daemon information and disk usage, and the daemon's event stream
 * Local and remote daemons: `unix://`, `npipe://`, `tcp://`/`http://` and `ssh://` endpoints, with `DOCKER_HOST` honored
 * CPU throttling reports - the `nr_throttled / nr_periods` ratio with a severity band and a plain-English interpretation
@@ -61,8 +62,8 @@ runs the operating system's own SSH client rather than referencing an SSH librar
   create it unless "Allow the default Docker socket to be used" is enabled), the socket named by the
   Docker CLI's current context and then Docker Desktop's `~/.docker/run/docker.sock` are tried first.
   TLS-secured `https://` endpoints are not supported; use `ssh://` to reach a remote daemon.
-* The `docker` command-line tool on PATH, but only for four operations: `Images.BuildAsync`
-  (BuildKit builds go through the CLI), `Images.PullAsync` *when* an anonymous pull is refused
+* The `docker` command-line tool on PATH, but only for five operations: `Images.BuildAsync`
+  (BuildKit builds go through the CLI), `Images.PruneBuildCacheAsync`, `Images.PullAsync` *when* an anonymous pull is refused
   and a credential helper is needed, and the `docker cp` steps inside
   `Analysis.AnalyzeImageEfficiencyAsync` and `Analysis.LintDockerfileAsync`. Everything else is
   pure Engine API and needs no CLI at all. Point `DockerClientOptions.DockerCliPath` at a

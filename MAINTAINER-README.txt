@@ -61,7 +61,10 @@ REPOSITORY LAYOUT
                                      path-escape guard), ExcludeMatcher and
                                      ArchiveContent (the streamed request body)
       Images/                        ImageOperations and image DTOs, including
-                                     the CLI-backed BuildKit build path
+                                     the CLI-backed BuildKit build path and
+                                     build-cache prune (BuildCachePruneOptions,
+                                     BuildCachePruneResult, and the internal
+                                     DockerSizeText parser for CLI sizes)
       Networks/                      NetworkOperations and DTOs
       Volumes/                       VolumeOperations and DTOs
       System/                        SystemOperations and DTOs (version, info,
@@ -140,7 +143,7 @@ THIS IS AN INTEGRATION SUITE, NOT A UNIT SUITE. It requires a running Docker
 daemon and does real work against it: it pulls busybox:latest, alpine:latest,
 alpine:3.19 and nginx:alpine at startup, builds images, starts containers,
 creates networks and volumes, and provokes real OOM kills and real CPU
-throttling. Five small classes are the exception and need no daemon at all --
+throttling. Seven small classes are the exception and need no daemon at all --
 PidsStatsTests (wire-level converter behaviour), AnalysisOperationsTests
 (argument-shape and reference-splitting behaviour), ContainerArchiveWriterTests
 (exclusion globs and mode selection for copies into a container),
@@ -149,7 +152,11 @@ overwrite and cancellation of copies out of a container, fed archives built in
 memory, because a stock daemon never produces a hostile archive) and
 DockerCliRunnerTests (the one retried CLI failure: its predicate, and the retry
 loop driven through an internal process-launch seam, so it needs no docker
-executable either). None of the five joins DockerTestCollection, and all of
+executable either), ImageOperationsTests (the `docker builder prune` argument
+list for each BuildCachePruneOptions setting, and result/exception mapping
+through that same seam -- deliberately NO real prune) and DockerSizeTextTests
+(the CLI size parser behind BuildCachePruneResult.ReclaimedBytes). None of the
+seven joins DockerTestCollection, and all of
 them run unchanged on Windows, Linux and macOS.
 
 ContainerArchiveTests is the live half of the copy-in/copy-out API. It builds a
@@ -205,14 +212,14 @@ THE ENVIRONMENT GATE
 gates EXACTLY ONE test -- SlimTests.OptimizeImageAsync_ProducesASmallerImage --
 through Infrastructure/EnvGatedFactAttribute.cs, a FactAttribute subclass that
 sets Skip unless the named variable equals the expected value. Nothing else in
-the suite is gated. The default run is therefore 176 total / 175 passed / 1
-skipped on Linux and macOS, and 176 / 174 / 2 on Windows, where
+the suite is gated. The default run is therefore 233 total / 232 passed / 1
+skipped on Linux and macOS, and 233 / 231 / 2 on Windows, where
 SshTransportTests.Resolve_WithoutAnyConfiguration_NamesASocketThatExistsOnUnix
 also skips itself (the Unix socket fallbacks do not apply there); with the gate
-open, one fewer is skipped. (Counts from 2026-10-09, after DockerCliRunnerTests
-added 28 daemon-free tests. Only the default Windows run was observed then --
-Windows 11, Docker Desktop 29.8.2, 130 seconds -- and the other figures follow
-from it; the gated run was not repeated.)
+open, one fewer is skipped. (Counts from 2026-10-09, after the build-cache
+prune added 39 daemon-free tests and one live one. Only the default Linux run
+was observed then -- LMDE 7, Docker 29.8.2, 128 seconds -- and the other
+figures follow from it; the gated run was not repeated.)
 
 TREAT THE GATED RUN AS PART OF A RELEASE CHECK, NOT AN OPTIONAL EXTRA. That
 single test is what caught a shipped library defect that had never been

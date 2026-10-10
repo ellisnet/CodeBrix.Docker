@@ -79,9 +79,11 @@ WHAT MUST BE PRESENT AT RUN TIME
     SystemOperations.EnsureLinuxDaemonAsync throws a DockerException naming the
     daemon's OSType when it is anything but "linux".
 
-  - The `docker` command-line tool on PATH, but only for four operations:
+  - The `docker` command-line tool on PATH, but only for five operations:
     ImageOperations.BuildAsync (BuildKit builds go through the CLI, because the
-    Engine API's build endpoint is the legacy builder), ImageOperations.PullAsync
+    Engine API's build endpoint is the legacy builder),
+    ImageOperations.PruneBuildCacheAsync (`docker builder prune`),
+    ImageOperations.PullAsync
     WHEN an anonymous pull is refused and a credential helper is needed, and the
     `docker cp` steps inside AnalysisOperations.AnalyzeImageEfficiencyAsync and
     AnalysisOperations.LintDockerfileAsync. Point
@@ -1299,6 +1301,10 @@ IMAGES: ImageOperations
     Task<ImageBuildResult> BuildAsync(
         ImageBuildSpec spec, CancellationToken cancellationToken = default);
 
+    Task<BuildCachePruneResult> PruneBuildCacheAsync(
+        BuildCachePruneOptions options = null,
+        CancellationToken cancellationToken = default);
+
 PullAsync tries an anonymous pull over the Engine API first and reports each
 progress line to `progress`. If the registry refuses it for authentication
 reasons, it automatically retries through `docker pull`, which picks up the
@@ -1310,6 +1316,55 @@ BuildAsync shells out to `docker build` because BuildKit lives in the CLI; the
 Engine API's own build endpoint is the legacy builder. Both streams are captured
 in arrival order, so the BuildKit progress that normally goes to standard error
 is in the result.
+
+BUILD CACHE -- BuildAsync leaves BuildKit build cache behind, from hundreds of
+megabytes to gigabytes per image. That cache is NOT freed by RemoveAsync or by
+any PruneAsync overload (those remove images only), it carries NO labels, and
+the only way to reclaim it is `docker builder prune`, which
+PruneBuildCacheAsync runs (`docker builder prune --force`, through the same CLI,
+DockerCliPath and endpoint/DOCKER_HOST as BuildAsync; no timeout).
+
+    THE PRUNE IS ENGINE-WIDE. It removes every unused BuildKit cache entry on
+    the engine -- EVERY project's and tool's, not only the cache of images this
+    library built -- and it CANNOT be narrowed by label. OlderThan and
+    KeepStorageBytes are the only limits. All = true (`--all`) goes further and
+    also removes cache still referenced by images plus BuildKit's
+    internal/frontend images. Never call it unfiltered on a shared machine
+    without meaning to cool every other project's builds.
+
+    public sealed class BuildCachePruneOptions
+    {
+        public bool      All              { get; set; }  // --all
+        public long      KeepStorageBytes { get; set; }  // when > 0: --reserved-space <bytes>
+                                                         // (buildx >= 0.19) or --keep-storage
+                                                         // (older buildx / legacy builder)
+        public TimeSpan? OlderThan        { get; set; }  // --filter until=<N>h, whole
+                                                         // hours rounded up, min 1h
+    }
+
+    public sealed class BuildCachePruneResult
+    {
+        public string ReclaimedSpaceText { get; init; }  // the CLI's "Total:" value,
+                                                         // e.g. "0B", "14.56GB"; null if absent
+        public long?  ReclaimedBytes     { get; init; }  // parsed: kB/MB/GB/TB = 1000-based,
+                                                         // KiB/MiB/GiB = 1024-based; null if
+                                                         // unparseable
+        public string Output             { get; init; }  // stdout+stderr interleaved
+        public string StorageFlag        { get; init; }  // --reserved-space / --keep-storage
+                                                         // used for KeepStorageBytes; null
+                                                         // when no limit was asked for
+    }
+
+With KeepStorageBytes > 0 the prune first runs `docker buildx version` (once
+per ImageOperations instance, cached) and passes --reserved-space from buildx
+0.19 on, --keep-storage before that or when the plugin is missing (the legacy
+builder only knows the old name). A non-zero exit raises DockerCliException,
+exactly as BuildAsync does;
+cancellation kills the CLI and propagates. A safe probe that prunes nothing:
+
+    var result = await client.Images.PruneBuildCacheAsync(
+        new BuildCachePruneOptions { OlderThan = TimeSpan.FromDays(36500) }, ct);
+    // result.ReclaimedSpaceText == "0B", result.ReclaimedBytes == 0
 
     public sealed class ImageBuildSpec
     {
@@ -3236,8 +3291,9 @@ COMMON PITFALLS TO AVOID
 17. DO NOT assume the analysis tier is free of the CLI. ScanImageAsync needs no
     CLI, but AnalyzeImageEfficiencyAsync and LintDockerfileAsync move files in
     and out of their tool container with `docker cp`, so they need the docker
-    executable on PATH (DockerClientOptions.DockerCliPath). Images.BuildAsync
-    and an authenticated Images.PullAsync are the other two.
+    executable on PATH (DockerClientOptions.DockerCliPath). Images.BuildAsync,
+    Images.PruneBuildCacheAsync and an authenticated Images.PullAsync are the
+    others.
 
 18. DO NOT rely on DockerClientOptions.SshArguments reaching the CLI-backed
     operations. Over an ssh:// endpoint, BuildAsync and a credentialled
@@ -3292,6 +3348,13 @@ COMMON PITFALLS TO AVOID
     with it unless you exclude them.
 
 27. DO NOT target .NET versions below 10.0.
+
+28. DO NOT expect removing an image to free its BuildKit cache. Images.RemoveAsync
+    and Images.PruneAsync reclaim image layers only; the build cache BuildAsync
+    left behind stays until Images.PruneBuildCacheAsync runs. And that prune is
+    ENGINE-WIDE and unlabelled -- it takes every project's unused cache, not
+    just yours -- so bound it with OlderThan / KeepStorageBytes, and use
+    All = true only when you mean to drop referenced cache too.
 
 
 ================================================================================
@@ -3542,6 +3605,8 @@ IMAGES      client.Images
             .PruneAsync(dangling: true, labelFilters)
             .BuildAsync(new ImageBuildSpec { ContextDirectory, DockerfilePath, Tags,
                 BuildArgs, Target, Pull, NoCache, Labels, Output }) -> ImageBuildResult
+            .PruneBuildCacheAsync(new BuildCachePruneOptions { All, KeepStorageBytes,
+                OlderThan }) -> BuildCachePruneResult   // ENGINE-WIDE, unlabelled
 
 NETWORKS    client.Networks
             .CreateAsync(name, "bridge", labels) -> string id
@@ -3588,7 +3653,8 @@ ERRORS      DockerException
                                       byte-mode pipe
             ArgumentException      -> incomplete spec, thrown before any request
 
-CLI NEEDED  Images.BuildAsync, an authenticated Images.PullAsync,
+CLI NEEDED  Images.BuildAsync, Images.PruneBuildCacheAsync, an authenticated
+            Images.PullAsync,
             Analysis.AnalyzeImageEfficiencyAsync, Analysis.LintDockerfileAsync
 
 TARGET      .NET 10 or later

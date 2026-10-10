@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using SilverAssertions;
 using Xunit;
 
 namespace CodeBrix.Docker.Tests;
@@ -231,5 +232,24 @@ public sealed class ImageTests(DockerTestFixture fixture)
         Assert.Equal(1, inspect.LayerCount);
         Assert.NotNull(inspect.Config);
         Assert.Contains(inspect.DisplayName, inspect.RepoTags);
+    }
+
+    [Fact]
+    public async Task PruneBuildCacheAsync_WithAHugeAgeFilter_PrunesNothing()
+    {
+        //Arrange
+        // NEVER run an unfiltered build-cache prune here: it is engine-wide and would wipe the shared
+        // BuildKit cache other projects on this engine rely on. A 100-year age filter matches nothing,
+        // which still exercises the real CLI, its exit code and its Total: line.
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        var options = new BuildCachePruneOptions { OlderThan = TimeSpan.FromDays(36500) };
+
+        //Act
+        var result = await Client.Images.PruneBuildCacheAsync(options, cancellation.Token);
+
+        //Assert
+        result.ReclaimedSpaceText.Should().Be("0B");
+        result.ReclaimedBytes.Should().Be(0L);
+        result.Output.Should().Contain("Total:");
     }
 }

@@ -27,11 +27,23 @@ public sealed class ImageOperations
 
     private readonly DockerApiClient _api;
     private readonly DockerCliRunner _cli;
+    private readonly SemaphoreSlim _buildxVersionGate = new(1, 1);
+    private bool _buildxVersionKnown;
+    private Version _buildxVersion;
 
     internal ImageOperations(DockerApiClient api, DockerClientOptions options)
+        : this(api, new DockerCliRunner(options))
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance with a supplied CLI runner, so that the CLI-backed operations can be
+    /// tested through the runner's process-launch seam without a docker executable.
+    /// </summary>
+    internal ImageOperations(DockerApiClient api, DockerCliRunner cli)
     {
         _api = api;
-        _cli = new DockerCliRunner(options);
+        _cli = cli ?? throw new ArgumentNullException(nameof(cli));
     }
 
     // ---------------------------------------------------------------------------------------
@@ -329,6 +341,177 @@ public sealed class ImageOperations
             Tags = tags,
             Output = output,
         };
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Build cache
+    // ---------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Frees BuildKit build cache by running <c>docker builder prune --force</c>.
+    /// </summary>
+    /// <param name="options">
+    /// What to prune, or <see langword="null"/> for the CLI's default: every unused, dangling cache entry
+    /// on the engine.
+    /// </param>
+    /// <param name="cancellationToken">A cancellation token that kills the CLI process when cancelled.</param>
+    /// <returns>The reclaimed space and the CLI output.</returns>
+    /// <remarks>
+    /// <para>
+    /// WARNING -- THIS PRUNE IS ENGINE-WIDE. It removes every unused BuildKit cache entry on the engine,
+    /// belonging to EVERY project and tool that builds there, not only the cache of images this library
+    /// built. Build cache carries no labels, so unlike <see cref="PruneAsync(bool, IDictionary{string, string}, CancellationToken)"/>
+    /// it CANNOT be narrowed by label; <see cref="BuildCachePruneOptions.OlderThan"/> and
+    /// <see cref="BuildCachePruneOptions.KeepStorageBytes"/> are the only limits. Other builds on the
+    /// engine will start cold afterwards.
+    /// </para>
+    /// <para>
+    /// WARNING -- <see cref="BuildCachePruneOptions.All"/> (<c>--all</c>) goes further still: it also
+    /// removes cache that is still referenced by existing images, and BuildKit's internal/frontend images.
+    /// </para>
+    /// <para>
+    /// This is the ONLY way this library frees the cache <see cref="BuildAsync"/> leaves behind, which can
+    /// run from hundreds of megabytes to gigabytes per image. <see cref="RemoveAsync"/> and every
+    /// <c>PruneAsync</c> overload remove images only; they NEVER reclaim build cache.
+    /// </para>
+    /// <para>
+    /// The command runs through the same docker CLI, options and endpoint (<c>DOCKER_HOST</c>) as
+    /// <see cref="BuildAsync"/>. No timeout is applied.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="DockerCliException">The CLI could not start, or exited non-zero.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    public async Task<BuildCachePruneResult> PruneBuildCacheAsync(BuildCachePruneOptions options = null,
+        CancellationToken cancellationToken = default)
+    {
+        var storageFlag = options is { KeepStorageBytes: > 0 }
+            ? StorageFlagFor(await GetBuildxVersionAsync(cancellationToken).ConfigureAwait(false))
+            : null;
+        var args = BuildCachePruneArguments(options, storageFlag ?? KeepStorageFlag);
+        var log = new BuildLog(inner: null);
+        await _cli.RunAsync(args, workingDir: null, log, cancellationToken).ConfigureAwait(false);
+
+        var output = log.ToString();
+        var total = DockerSizeText.FindTotal(output);
+
+        return new BuildCachePruneResult
+        {
+            ReclaimedSpaceText = total,
+            ReclaimedBytes = DockerSizeText.ParseBytes(total),
+            Output = output,
+            StorageFlag = storageFlag,
+        };
+    }
+
+    /// <summary>The storage limit flag of the legacy builder and of buildx before 0.19.</summary>
+    internal const string KeepStorageFlag = "--keep-storage";
+
+    /// <summary>The storage limit flag of buildx 0.19 and later, where <c>--keep-storage</c> is deprecated.</summary>
+    internal const string ReservedSpaceFlag = "--reserved-space";
+
+    /// <summary>The first buildx version whose <c>prune</c> accepts <c>--reserved-space</c>.</summary>
+    internal static readonly Version ReservedSpaceMinimumBuildxVersion = new(0, 19, 0);
+
+    /// <summary>
+    /// Picks the storage limit flag for a buildx version: <see cref="ReservedSpaceFlag"/> from
+    /// <see cref="ReservedSpaceMinimumBuildxVersion"/> on, <see cref="KeepStorageFlag"/> for older buildx
+    /// and for no buildx at all (<see langword="null"/>: the legacy builder only knows the old flag).
+    /// </summary>
+    internal static string StorageFlagFor(Version buildxVersion) =>
+        buildxVersion is not null && buildxVersion >= ReservedSpaceMinimumBuildxVersion ? ReservedSpaceFlag : KeepStorageFlag;
+
+    /// <summary>
+    /// Reads the version out of <c>docker buildx version</c> output such as
+    /// <c>github.com/docker/buildx v0.37.1 0b265a9f...</c>; <see langword="null"/> when none is found.
+    /// </summary>
+    internal static Version ParseBuildxVersion(string output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return null;
+        }
+
+        var match = System.Text.RegularExpressions.Regex.Match(output, @"\bv?(\d+)\.(\d+)\.(\d+)\b");
+        return match.Success
+            && int.TryParse(match.Groups[1].Value, out var major)
+            && int.TryParse(match.Groups[2].Value, out var minor)
+            && int.TryParse(match.Groups[3].Value, out var patch)
+            ? new Version(major, minor, patch)
+            : null;
+    }
+
+    /// <summary>
+    /// The buildx plugin's version from <c>docker buildx version</c>, probed once per instance and cached;
+    /// <see langword="null"/> when the plugin is missing or its version cannot be read (the command then
+    /// goes to the legacy builder).
+    /// </summary>
+    private async Task<Version> GetBuildxVersionAsync(CancellationToken cancellationToken)
+    {
+        if (_buildxVersionKnown)
+        {
+            return _buildxVersion;
+        }
+
+        await _buildxVersionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!_buildxVersionKnown)
+            {
+                Version version = null;
+                try
+                {
+                    var probe = await _cli.TryRunAsync(["buildx", "version"], workingDir: null, output: null, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (probe.ExitCode == 0)
+                    {
+                        version = ParseBuildxVersion(probe.Stdout);
+                    }
+                }
+                catch (DockerCliException)
+                {
+                    // No usable docker CLI for the probe: the prune itself will report that.
+                }
+
+                _buildxVersion = version;
+                _buildxVersionKnown = true;
+            }
+
+            return _buildxVersion;
+        }
+        finally
+        {
+            _buildxVersionGate.Release();
+        }
+    }
+
+    internal static IReadOnlyList<string> BuildCachePruneArguments(BuildCachePruneOptions options, string storageFlag)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageFlag);
+        var args = new List<string> { "builder", "prune", "--force" };
+        if (options is null)
+        {
+            return args;
+        }
+
+        if (options.All)
+        {
+            args.Add("--all");
+        }
+
+        if (options.KeepStorageBytes > 0)
+        {
+            args.Add(storageFlag);
+            args.Add(options.KeepStorageBytes.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        if (options.OlderThan is { } olderThan)
+        {
+            var hours = Math.Max(1L, (long)Math.Ceiling(olderThan.TotalHours));
+            args.Add("--filter");
+            args.Add($"until={hours.ToString(System.Globalization.CultureInfo.InvariantCulture)}h");
+        }
+
+        return args;
     }
 
     // ---------------------------------------------------------------------------------------
