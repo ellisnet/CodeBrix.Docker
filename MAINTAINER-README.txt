@@ -76,6 +76,8 @@ REPOSITORY LAYOUT
                                      option/result types and output parsers
       Cli/                           DockerCliRunner and CliResult, the
                                      Process-based shell-out to `docker`
+                                     (its one retried failure is described
+                                     under NOTES)
       InternalsVisibleTo.cs          grants CodeBrix.Docker.Tests
 
     tests/CodeBrix.Docker.Tests/     the xunit.v3 integration suite
@@ -138,13 +140,17 @@ THIS IS AN INTEGRATION SUITE, NOT A UNIT SUITE. It requires a running Docker
 daemon and does real work against it: it pulls busybox:latest, alpine:latest,
 alpine:3.19 and nginx:alpine at startup, builds images, starts containers,
 creates networks and volumes, and provokes real OOM kills and real CPU
-throttling. Four small classes are the exception and need no daemon at all --
+throttling. Five small classes are the exception and need no daemon at all --
 PidsStatsTests (wire-level converter behaviour), AnalysisOperationsTests
 (argument-shape and reference-splitting behaviour), ContainerArchiveWriterTests
-(exclusion globs and mode selection for copies into a container) and
+(exclusion globs and mode selection for copies into a container),
 ContainerArchiveExtractorTests (the path-escape guard, root stripping,
 overwrite and cancellation of copies out of a container, fed archives built in
-memory, because a stock daemon never produces a hostile archive).
+memory, because a stock daemon never produces a hostile archive) and
+DockerCliRunnerTests (the one retried CLI failure: its predicate, and the retry
+loop driven through an internal process-launch seam, so it needs no docker
+executable either). None of the five joins DockerTestCollection, and all of
+them run unchanged on Windows, Linux and macOS.
 
 ContainerArchiveTests is the live half of the copy-in/copy-out API. It builds a
 small tree per test in a temporary directory (nested folders, a 0755 script, a
@@ -199,10 +205,14 @@ THE ENVIRONMENT GATE
 gates EXACTLY ONE test -- SlimTests.OptimizeImageAsync_ProducesASmallerImage --
 through Infrastructure/EnvGatedFactAttribute.cs, a FactAttribute subclass that
 sets Skip unless the named variable equals the expected value. Nothing else in
-the suite is gated. The default run is therefore 146 total / 145 passed / 1
-skipped; with the gate open it should be 146 / 146 / 0 (counts from 2026-10-08,
-after the copy-in/copy-out tests were added; the gated run was not repeated
-then).
+the suite is gated. The default run is therefore 176 total / 175 passed / 1
+skipped on Linux and macOS, and 176 / 174 / 2 on Windows, where
+SshTransportTests.Resolve_WithoutAnyConfiguration_NamesASocketThatExistsOnUnix
+also skips itself (the Unix socket fallbacks do not apply there); with the gate
+open, one fewer is skipped. (Counts from 2026-10-09, after DockerCliRunnerTests
+added 28 daemon-free tests. Only the default Windows run was observed then --
+Windows 11, Docker Desktop 29.8.2, 130 seconds -- and the other figures follow
+from it; the gated run was not repeated.)
 
 TREAT THE GATED RUN AS PART OF A RELEASE CHECK, NOT AN OPTIONAL EXTRA. That
 single test is what caught a shipped library defect that had never been
@@ -703,6 +713,62 @@ TWO TRANSPORT DEFECTS FIXED, WORTH NOT REINTRODUCING
      see DockerClientOptions.SshArguments and it reads the invoking user's
      ~/.ssh/config and known_hosts (OpenSSH resolves "~" from the passwd entry,
      so HOME cannot redirect it).
+
+THE CLI RUNNER RETRIES ONE WINDOWS START-UP FAILURE, AND NOTHING ELSE
+--------------------------------------------------------------------
+Observed on Windows 11 with Docker Desktop 29.8.2, in 1 of 4 runs of a suite
+that started many docker CLI processes in parallel: one `docker build` exited 1
+at once with
+
+    Failed to initialize: unable to resolve docker endpoint: context
+    "desktop-linux": open C:\Users\...\.docker\contexts\meta\<sha256>\meta.json:
+    The process cannot access the file because it is being used by another
+    process.
+
+That is ERROR_SHARING_VIOLATION on the CLI's own context metadata while another
+process (Docker Desktop, or another docker CLI) had the file open -- a race, not
+a failure of the command. DockerCliRunner.TryRunAsync, which RunAsync and so
+every CLI-backed operation goes through, therefore runs the same command again
+when IsTransientInitializationFailure(exitCode, stderr) holds: a non-zero exit
+AND standard error containing BOTH "Failed to initialize" AND "being used by
+another process" (ordinal, ignoring case). At most three retries, after 100,
+250 and 500 ms (DockerCliRunner.TransientFailureRetryDelays); the pauses honour
+the CancellationToken, so cancellation still surfaces OperationCanceledException.
+
+Why it is safe, and why both texts are required:
+
+  - The CLI writes "Failed to initialize" immediately before it exits during
+    start-up, before it has an API client, so the attempt never reached the
+    daemon. That is what makes a repeat safe for builds and copies alike.
+  - The sharing-violation text alone is NOT enough: it can come from a step
+    the CLI carries on past, or from a build step that did reach the engine.
+    "unable to resolve docker endpoint" without "Failed to initialize" is not
+    enough either, because it does not prove the CLI stopped there. The test
+    data pins both of those as false.
+  - Nothing is ever written to the child's standard input
+    (RedirectStandardInput is false), so every attempt is an exact repeat. If
+    the runner ever feeds the CLI input, revisit the loop first.
+  - The check is text only and is deliberately NOT gated on
+    OperatingSystem.IsWindows(): the sharing-violation text never appears on
+    Linux or macOS, so behaviour there is identical and the tests run
+    everywhere.
+  - Go asks Windows for the English text of an error first, so the match
+    usually holds on non-English systems too; where the text comes back
+    localized, the result is simply the old behaviour -- no retry.
+  - Only the sharing violation is matched. The neighbouring lock violation
+    ("another process has locked a portion of the file") was not observed and
+    is deliberately left out; the test data pins it as false.
+
+What a retry looks like from outside: lines the failed attempt wrote have
+already gone to the IProgress<string> (and so into ImageBuildResult.Output),
+and one line announcing the retry follows them; the CliResult, and any
+DockerCliException, describe the LAST attempt only (same command line, its
+exit code, its standard error). A process that cannot start is still thrown on
+the first attempt. Every other failure is returned or raised exactly as before.
+
+The internal constructor DockerCliRunner(options, runAttempt, retryDelays) is
+the test seam: DockerCliRunnerTests passes a scripted attempt in place of the
+real process and zero-length pauses, so the loop is tested without Docker.
 
 WHY MemoryBreakdownReport.LimitBytes IS THE CONFIGURED LIMIT
 -----------------------------------------------------------

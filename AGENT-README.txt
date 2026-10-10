@@ -335,6 +335,30 @@ DockerException, so one catch clause covers the lot:
     non-zero. Command is the full command line, StdErr is everything the process
     wrote to standard error, and ExitCode is the process exit code.
 
+  - EXACTLY ONE CLI FAILURE IS RETRIED before that exception is raised. On
+    Windows the docker CLI can stop while it is still starting up, because
+    another process (Docker Desktop, or another docker CLI) has its context
+    metadata file open:
+
+        Failed to initialize: unable to resolve docker endpoint: context
+        "desktop-linux": open ...\.docker\contexts\meta\<sha256>\meta.json:
+        The process cannot access the file because it is being used by another
+        process.
+
+    When the command exits non-zero and its standard error contains BOTH
+    "Failed to initialize" and "being used by another process" (ordinal,
+    ignoring case), the same command is run again, up to three more times,
+    after pauses of 100, 250 and 500 ms; your CancellationToken also cancels
+    the pauses. That is safe even for a build or a `docker cp`, because the CLI
+    stopped before it had any connection to the daemon. Lines the failed
+    attempt wrote stay in your IProgress<string> (and so in
+    ImageBuildResult.Output), followed by one line announcing the retry. If
+    every attempt fails, the DockerCliException describes the LAST one.
+    Nothing else is retried -- a real build error, a daemon that is not
+    running, a refused permission, a missing container or context -- and on
+    Linux and macOS, where the sharing-violation text never appears, nothing
+    changes at all.
+
   - DockerException itself (with no subclass) is used for transport failures and
     for "this can never work" conditions -- an unreachable daemon, an untrusted
     SSH host key, a remote without the Docker CLI, a container that can never
@@ -3408,9 +3432,9 @@ The repository also carries tests for the streaming exec API
 (SshTransportTests.cs, Infrastructure/SshdTestHarness.cs), the PID-limit wire
 converter (PidsStatsTests.cs), the analysis tool-image defaults
 (AnalysisOperationsTests.cs), and -- without a daemon -- the copy path-escape
-guard (ContainerArchiveExtractorTests.cs) and the exclusion and mode rules
-(ContainerArchiveWriterTests.cs), all in the same tests/CodeBrix.Docker.Tests
-folder.
+guard (ContainerArchiveExtractorTests.cs), the exclusion and mode rules
+(ContainerArchiveWriterTests.cs) and the CLI runner's one retried failure
+(DockerCliRunnerTests.cs), all in the same tests/CodeBrix.Docker.Tests folder.
 
 A full sample application built on this package -- a Redis topology manager with
 container management, live diagnostics and an interactive console into any
