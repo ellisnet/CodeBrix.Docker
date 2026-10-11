@@ -992,6 +992,8 @@ this needs no native dependency and behaves the same on every platform.
         public bool                  Tty           { get; set; }   // default false
         public int?                  ConsoleHeight { get; set; }   // rows, Tty only
         public int?                  ConsoleWidth  { get; set; }   // cols, Tty only
+                                     // (both set: also re-sent as a resize once
+                                     //  started - Podman ignores it at start)
         public string                User          { get; set; }
         public string                WorkingDir    { get; set; }
         public IList<string>         Env           { get; set; } = [];   // "KEY=VALUE"
@@ -1006,7 +1008,7 @@ dimension is set to zero or less.
     {
         public string ExecId                 { get; }  // feeds Resize/InspectExecAsync
         public bool   IsTty                  { get; }  // what was asked for
-        public bool   UsesRawFraming         { get; }  // what the daemon answered with
+        public bool   UsesRawFraming         { get; }  // = IsTty: how output is decoded
         public bool   CanCloseStandardInput  { get; }  // transport capability
 
         public Task<ExecStreamReadResult> ReadAsync(
@@ -1064,9 +1066,11 @@ THE TWO FRAMINGS
     stdout/stderr    merged into one stream      kept apart
     Resize           honoured inside the box     not applicable
 
-The library decides which framing to decode from the daemon's Content-Type
-header, NOT from the Tty flag it asked for. UsesRawFraming reports what actually
-came back. With a TTY, every ReadAsync reports ExecStreamTarget.StandardOutput
+The library decodes the framing that matches the Tty flag it asked for, as the
+docker CLI does: a non-TTY exec is always stdcopy-framed. The daemon's
+Content-Type header is NOT used for this, because Podman and Docker before API
+1.42 label framed streams application/vnd.docker.raw-stream too. UsesRawFraming
+equals IsTty. With a TTY, every ReadAsync reports ExecStreamTarget.StandardOutput
 and ReadToEndAsync leaves ContainerLogs.Stderr empty -- that is the terminal
 merging the streams, not a library shortcut. Turn the TTY off when the two must
 stay apart.

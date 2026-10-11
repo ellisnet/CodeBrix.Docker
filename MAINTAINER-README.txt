@@ -632,9 +632,20 @@ members -- ReadToEndAsync and Demultiplex -- byte for byte. Container logs and
 the one-shot ExecAsync still use the static path, which sniffs the buffer rather
 than being told which framing to expect.
 
-The library decides the framing from the daemon's Content-Type
-(application/vnd.docker.raw-stream versus .multiplexed-stream), NOT from the Tty
-flag it asked for. Keep it that way.
+The streaming exec decides the framing from the Tty flag it asked for, exactly
+as the docker CLI does, NOT from the daemon's Content-Type. The Content-Type is
+not reliable: Podman (5.x included) and Docker before API 1.42 answer EVERY
+hijacked exec with application/vnd.docker.raw-stream, even when the body is
+stdcopy frames. Trusting it decoded the frames as raw bytes, so their 8-byte
+headers landed inside the command's output (a non-TTY exec over the Podman API
+socket corrupted most lines of a long output; fixed 2026-10-10, fenced by
+ContainerExecStreamTests). HijackedStream.IsRawStream is informational only.
+
+Podman also ignores the exec-start ConsoleSize: a TTY session starts at 0x0.
+ExecStreamAsync therefore re-sends ConsoleHeight/ConsoleWidth through the exec
+resize endpoint right after the hijack (as the docker CLI does; best effort, up
+to 5 tries 100 ms apart). Fenced by ExecStreamTests.ResizeExecAsync_* on
+Podman.
 
 HOW THE ssh:// TRANSPORT IS WIRED
 ---------------------------------

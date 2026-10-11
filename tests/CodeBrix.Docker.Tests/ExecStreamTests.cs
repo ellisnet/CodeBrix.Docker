@@ -100,6 +100,59 @@ public sealed class ExecStreamTests(DockerTestFixture fixture)
         }
     }
 
+    [Theory]
+    [InlineData(5000, 200, false)]
+    [InlineData(5000, 200, true)]
+    [InlineData(100, 65536, false)]
+    public async Task ExecStreamAsync_WithoutTty_DeliversEveryLineOfALargeOutputInOrder(int lineCount, int padLength,
+        bool interleaveStandardError)
+    {
+        //Arrange
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+        var spec = fixture.Spec("exec-large-output", "alpine:latest", "sleep", "300");
+        var pad = new string('x', padLength);
+        var errorLine = interleaveStandardError ? "echo \"err $i\" >&2; " : string.Empty;
+        var script = $"p={pad}; i=0; while [ $i -lt {lineCount} ]; do echo \"{{\\\"line\\\":$i,\\\"pad\\\":\\\"$p\\\"}}\"; "
+                     + errorLine + "i=$((i+1)); done";
+        string id = null;
+
+        try
+        {
+            id = await Client.Containers.RunAsync(spec, cancellation.Token);
+
+            //Act
+            await using var session = await Client.Containers.ExecStreamAsync(id, new ExecSpec
+            {
+                Command = ["/bin/sh", "-c", script],
+                Tty = false,
+            }, cancellation.Token);
+
+            var logs = await session.ReadToEndAsync(cancellation.Token);
+            var exitCode = await session.WaitForExitAsync(cancellation.Token);
+
+            //Assert
+            var expectedOut = new StringBuilder();
+            var expectedErr = new StringBuilder();
+            for (var i = 0; i < lineCount; i++)
+            {
+                expectedOut.Append("{\"line\":").Append(i).Append(",\"pad\":\"").Append(pad).Append("\"}\n");
+                if (interleaveStandardError)
+                {
+                    expectedErr.Append("err ").Append(i).Append('\n');
+                }
+            }
+
+            session.UsesRawFraming.Should().BeFalse();
+            exitCode.Should().Be(0);
+            (logs.Stdout == expectedOut.ToString()).Should().BeTrue("every standard output line must arrive intact and in order");
+            (logs.Stderr == expectedErr.ToString()).Should().BeTrue("every standard error line must arrive intact and in order");
+        }
+        finally
+        {
+            await fixture.RemoveContainerQuietlyAsync(id);
+        }
+    }
+
     [Fact]
     public async Task ExecStreamAsync_WithStandardInput_DeliversItAndThenSignalsEndOfFile()
     {
@@ -210,7 +263,8 @@ public sealed class ExecStreamTests(DockerTestFixture fixture)
             //Assert
             // The stream must end on its own rather than leaving the caller waiting for a prompt.
             logs.Combined.Should().Contain("/bin/bash");
-            logs.Combined.Should().Contain("no such file or directory");
+            // Docker writes "no such file or directory", Podman (crun) "No such file or directory".
+            logs.Combined.Should().ContainEquivalentOf("no such file or directory");
             inspect.Running.Should().BeFalse();
             exitCode.Should().Be(127);
         }

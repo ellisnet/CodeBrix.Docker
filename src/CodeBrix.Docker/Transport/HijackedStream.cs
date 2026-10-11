@@ -65,6 +65,11 @@ internal sealed class HijackedStream : Stream, IWriteClosableStream
     /// Gets a value indicating whether the daemon declared the connection to carry verbatim
     /// pseudo-terminal bytes rather than <c>stdcopy</c> frames.
     /// </summary>
+    /// <remarks>
+    /// Informational only: Podman and Docker before API 1.42 send this content type for framed
+    /// (non-TTY) streams too, so <see cref="ContainerExecStream"/> decides the framing from the
+    /// requested TTY flag instead.
+    /// </remarks>
     public bool IsRawStream =>
         ContentType.StartsWith(RawStreamContentType, StringComparison.OrdinalIgnoreCase);
 

@@ -53,7 +53,10 @@ public sealed class ExecSpec
     /// </remarks>
     public bool Tty { get; set; }
 
-    /// <summary>Gets or sets the initial terminal height in rows. Applies only when <see cref="Tty"/> is set.</summary>
+    /// <summary>Gets or sets the initial terminal height in rows. Applies only when <see cref="Tty"/> is set,
+    /// together with <see cref="ConsoleWidth"/>.</summary>
+    /// <remarks>The size travels with the start request and is sent again as a resize once the session is
+    /// running, because Podman ignores it in the start request.</remarks>
     public int? ConsoleHeight { get; set; }
 
     /// <summary>Gets or sets the initial terminal width in columns. Applies only when <see cref="Tty"/> is set.</summary>

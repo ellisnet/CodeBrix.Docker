@@ -21,9 +21,11 @@ namespace CodeBrix.Docker;
 /// framing at all and the two output streams already merged.
 /// </para>
 /// <para>
-/// An instance is told which framing to expect — the daemon announces it in the hijack response's
-/// <c>Content-Type</c> — while the static <see cref="Demultiplex"/> path, used by the buffered logs
-/// and one-shot exec calls, sniffs the buffer instead.
+/// An instance is told which framing to expect — the exec session's requested TTY flag decides it,
+/// because the hijack response's <c>Content-Type</c> is not reliable (Podman and Docker before API
+/// 1.42 answer <c>application/vnd.docker.raw-stream</c> for framed streams too) — while the static
+/// <see cref="Demultiplex"/> path, used by the buffered logs and one-shot exec calls, sniffs the
+/// buffer instead.
 /// </para>
 /// </remarks>
 internal sealed class MultiplexedStreamReader : IDisposable, IAsyncDisposable

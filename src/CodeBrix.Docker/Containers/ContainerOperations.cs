@@ -13,6 +13,12 @@ namespace CodeBrix.Docker;
 /// </summary>
 public sealed partial class ContainerOperations
 {
+    /// <summary>How many times a TTY session's initial size is sent before giving up.</summary>
+    private const int InitialResizeAttempts = 5;
+
+    /// <summary>The pause between attempts to send a TTY session's initial size.</summary>
+    private static readonly TimeSpan InitialResizeRetryDelay = TimeSpan.FromMilliseconds(100);
+
     private readonly DockerApiClient _api;
 
     internal ContainerOperations(DockerApiClient api) => _api = api;
@@ -453,14 +459,55 @@ public sealed partial class ContainerOperations
             .PostForHijackedStreamAsync($"exec/{execId}/start", startRequest, cancellationToken)
             .ConfigureAwait(false);
 
+        ContainerExecStream session;
         try
         {
-            return new ContainerExecStream(_api, execId, transport, spec.Tty);
+            session = new ContainerExecStream(_api, execId, transport, spec.Tty);
         }
         catch
         {
             await transport.DisposeAsync().ConfigureAwait(false);
             throw;
+        }
+
+        if (startRequest.ConsoleSize is not null)
+        {
+            try
+            {
+                await ApplyInitialConsoleSizeAsync(execId, spec.ConsoleHeight.Value, spec.ConsoleWidth.Value,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                await session.DisposeAsync().ConfigureAwait(false);
+                throw;
+            }
+        }
+
+        return session;
+    }
+
+    /// <summary>
+    /// Sends the requested terminal size again once the session is running, as the <c>docker</c> CLI
+    /// does. Docker applies the start request's <c>ConsoleSize</c> itself, but Podman ignores it and
+    /// starts the terminal at 0x0, so without this a TTY session on Podman has no size until the
+    /// caller resizes it. Best effort: a daemon that is not ready yet is asked a few more times, and a
+    /// session that has already ended has nothing left to size.
+    /// </summary>
+    private async Task ApplyInitialConsoleSizeAsync(string execId, int height, int width,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < InitialResizeAttempts; attempt++)
+        {
+            try
+            {
+                await ResizeExecCoreAsync(_api, execId, height, width, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+            catch (DockerApiException)
+            {
+                await Task.Delay(InitialResizeRetryDelay, cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 

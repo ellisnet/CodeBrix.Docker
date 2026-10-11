@@ -60,9 +60,12 @@ public sealed class ContainerExecStream : IAsyncDisposable, IDisposable
         ExecId = execId;
         IsTty = tty;
 
-        // The daemon states the framing in the hijack response's Content-Type; trust that over the
-        // requested Tty flag, which only says what was asked for.
-        UsesRawFraming = transport.IsRawStream;
+        // The framing follows the Tty flag, exactly as the docker CLI decides it: a non-TTY exec is
+        // always stdcopy-framed. The hijack response's Content-Type cannot be trusted for this -
+        // Docker before API 1.42 and Podman (5.x included) label EVERY hijacked stream
+        // application/vnd.docker.raw-stream, even when the body is stdcopy frames, and decoding
+        // those frames as raw bytes puts their 8-byte headers into the command's output.
+        UsesRawFraming = tty;
         _reader = new MultiplexedStreamReader(transport, UsesRawFraming);
     }
 
@@ -73,8 +76,10 @@ public sealed class ContainerExecStream : IAsyncDisposable, IDisposable
     public bool IsTty { get; }
 
     /// <summary>
-    /// Gets a value indicating whether the daemon is sending verbatim terminal bytes rather than
-    /// <c>stdcopy</c> frames. Raw sessions report every chunk as
+    /// Gets a value indicating whether the session is decoded as verbatim terminal bytes rather than
+    /// <c>stdcopy</c> frames. It follows the requested <see cref="ExecSpec.Tty"/> flag, as the
+    /// <c>docker</c> CLI does: the daemon frames every non-TTY exec, whatever <c>Content-Type</c> it
+    /// answers with. Raw sessions report every chunk as
     /// <see cref="ExecStreamTarget.StandardOutput"/>, because a terminal has only one stream.
     /// </summary>
     public bool UsesRawFraming { get; }
