@@ -86,6 +86,7 @@ REPOSITORY LAYOUT
     tests/CodeBrix.Docker.Tests/     the xunit.v3 integration suite
       Infrastructure/                DockerTestFixture (the collection fixture),
                                      DockerTestCollection, EnvGatedFactAttribute,
+                                     ForeignPlatformFactAttribute,
                                      SshdTestHarness, TestSupport
 
     samples/RedisSetupTool/          the sample application (see EXTRAS-README)
@@ -143,7 +144,7 @@ THIS IS AN INTEGRATION SUITE, NOT A UNIT SUITE. It requires a running Docker
 daemon and does real work against it: it pulls busybox:latest, alpine:latest,
 alpine:3.19 and nginx:alpine at startup, builds images, starts containers,
 creates networks and volumes, and provokes real OOM kills and real CPU
-throttling. Seven small classes are the exception and need no daemon at all --
+throttling. Eight small classes are the exception and need no daemon at all --
 PidsStatsTests (wire-level converter behaviour), AnalysisOperationsTests
 (argument-shape and reference-splitting behaviour), ContainerArchiveWriterTests
 (exclusion globs and mode selection for copies into a container),
@@ -155,9 +156,28 @@ loop driven through an internal process-launch seam, so it needs no docker
 executable either), ImageOperationsTests (the `docker builder prune` argument
 list for each BuildCachePruneOptions setting, and result/exception mapping
 through that same seam -- deliberately NO real prune) and DockerSizeTextTests
-(the CLI size parser behind BuildCachePruneResult.ReclaimedBytes). None of the
-seven joins DockerTestCollection, and all of
+(the CLI size parser behind BuildCachePruneResult.ReclaimedBytes), and
+ContainerOperationsTests (the name and platform query parameters of POST
+/containers/create). ImageOperationsTests also pins the platform shaping of a
+pull (the images/create path and the `docker pull` fallback arguments) and of
+a build (the `docker build` argument list). None of the
+eight joins DockerTestCollection, and all of
 them run unchanged on Windows, Linux and macOS.
+
+ForeignPlatformTests is the live half of the platform options (ImagePullOptions.
+Platform, ContainerSpec.Platform, ImageBuildSpec.Platform): it pulls the arm64
+variant of alpine:latest, runs `uname -m` in an arm64 container (expects
+"aarch64"; ContainerInspectResult.Platform reads "linux") and builds a one-line
+`FROM alpine` image for linux/arm64 (expects Architecture "arm64"), all under
+qemu-user emulation. Its three tests use ForeignPlatformFactAttribute
+(Infrastructure/), which SKIPS them by name, with the reason, when no Docker
+engine answers a ping or when /proc/sys/fs/binfmt_misc/qemu-aarch64 is absent.
+On the containerd image store an arm64 pull adds content to the shared
+alpine:latest image instead of a tag, so each test records whether that
+variant was present first and, when it was not, removes just that variant
+again afterwards (`docker image rm --force --platform linux/arm64
+alpine:latest`); the native variant stays. On a graph-driver store the tests
+pull the native alpine:latest back instead; that branch has not been run.
 
 ContainerArchiveTests is the live half of the copy-in/copy-out API. It builds a
 small tree per test in a temporary directory (nested folders, a 0755 script, a
@@ -211,15 +231,18 @@ THE ENVIRONMENT GATE
 
 gates EXACTLY ONE test -- SlimTests.OptimizeImageAsync_ProducesASmallerImage --
 through Infrastructure/EnvGatedFactAttribute.cs, a FactAttribute subclass that
-sets Skip unless the named variable equals the expected value. Nothing else in
-the suite is gated. The default run is therefore 233 total / 232 passed / 1
-skipped on Linux and macOS, and 233 / 231 / 2 on Windows, where
-SshTransportTests.Resolve_WithoutAnyConfiguration_NamesASocketThatExistsOnUnix
-also skips itself (the Unix socket fallbacks do not apply there); with the gate
-open, one fewer is skipped. (Counts from 2026-10-09, after the build-cache
-prune added 39 daemon-free tests and one live one. Only the default Linux run
-was observed then -- LMDE 7, Docker 29.8.2, 128 seconds -- and the other
-figures follow from it; the gated run was not repeated.)
+sets Skip unless the named variable equals the expected value. No other
+environment variable gates anything. The default run is therefore 267 total /
+266 passed / 1 skipped on a Linux host with the qemu-aarch64 binfmt handler.
+The three ForeignPlatformTests skip themselves where that handler file does not
+exist, which includes every macOS and Windows host (267 / 263 / 4 on macOS), and
+on Windows SshTransportTests.Resolve_WithoutAnyConfiguration_NamesASocketThatExistsOnUnix
+also skips itself (the Unix socket fallbacks do not apply there), giving
+267 / 262 / 5; with the gate open, one fewer is skipped. (Counts from
+2026-10-18, after the platform options added 17 daemon-free test cases and 3
+live ones to the 247 before them. Only the default Linux run was observed --
+LMDE 7, Docker 29.9.1, 132 seconds -- and the other figures follow from it; the
+gated run was not repeated.)
 
 TREAT THE GATED RUN AS PART OF A RELEASE CHECK, NOT AN OPTIONAL EXTRA. That
 single test is what caught a shipped library defect that had never been
@@ -292,9 +315,9 @@ ENVIRONMENT ASSUMPTIONS THAT ARE EASY TO BREAK
 
   - OOM TESTS NEED SWAP ACCOUNTING. `docker info` must report SwapLimit: true.
     Without it the daemon cannot enforce memory-swap limits and the OOM tests
-    become flaky or never trigger.
+    become flaky or never produce a kill.
 
-  - THE OOM TRIGGER IS A TMPFS FILL, NOT `tail /dev/zero`. BusyBox's tail caps
+  - THE OOM PROVOCATION IS A TMPFS FILL, NOT `tail /dev/zero`. BusyBox's tail caps
     its own read-ahead buffer, so it exits 1 with OOMKilled false. The suite
     instead mounts a tmpfs larger than the memory limit and dd's into it
     (OomSpecs.MemoryHog): tmpfs pages are charged to the container's memory

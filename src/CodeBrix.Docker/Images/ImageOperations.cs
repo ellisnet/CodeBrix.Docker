@@ -136,19 +136,52 @@ public sealed class ImageOperations
     /// </remarks>
     /// <exception cref="DockerException">The registry or the daemon rejected the pull.</exception>
     /// <exception cref="DockerCliException">The command-line fallback also failed.</exception>
-    public async Task PullAsync(string reference, IProgress<string> progress = null,
+    public Task PullAsync(string reference, IProgress<string> progress = null,
+        CancellationToken cancellationToken = default) =>
+        PullAsync(reference, options: null, progress, cancellationToken);
+
+    /// <summary>
+    /// Pulls an image from its registry, with options such as the platform to pull.
+    /// </summary>
+    /// <param name="reference">
+    /// The image reference, for example <c>alpine:latest</c> or
+    /// <c>ghcr.io/owner/image@sha256:…</c>. A reference without a tag pulls <c>:latest</c>.
+    /// </param>
+    /// <param name="options">
+    /// The pull options, or <see langword="null"/> for the same pull as
+    /// <see cref="PullAsync(string, IProgress{string}, CancellationToken)"/>.
+    /// </param>
+    /// <param name="progress">
+    /// A receiver for the daemon's progress lines, or <see langword="null"/>. It has no default so that a
+    /// two-argument call such as <c>PullAsync(reference, null)</c> keeps meaning the other overload.
+    /// </param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>A task that completes when the image is present locally.</returns>
+    /// <remarks>
+    /// <para>
+    /// The pull behaves exactly as the other overload does: anonymously over the Engine API first, then
+    /// through <c>docker pull</c> if the registry refuses that for authentication reasons. A set
+    /// <see cref="ImagePullOptions.Platform"/> is sent as the <c>platform</c> query parameter of
+    /// <c>POST /images/create</c>, and as <c>--platform</c> on the command-line fallback.
+    /// </para>
+    /// <para>
+    /// On an engine using the containerd image store, a pull for another platform adds that variant's
+    /// content to the same local image (the tag is shared by every variant). On the older graph-driver
+    /// store the tag points at a single platform, so the pull REPLACES what the tag pointed at.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException"><see cref="ImagePullOptions.Platform"/> names more than one platform.</exception>
+    /// <exception cref="DockerException">The registry or the daemon rejected the pull.</exception>
+    /// <exception cref="DockerCliException">The command-line fallback also failed.</exception>
+    public async Task PullAsync(string reference, ImagePullOptions options, IProgress<string> progress,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(reference);
-
-        var (name, tag) = SplitReference(reference);
-        var query = new QueryStringBuilder()
-            .Add("fromImage", name)
-            .Add("tag", tag);
+        var platform = PlatformArgument.Normalize(options?.Platform, "ImagePullOptions.Platform", nameof(options));
 
         try
         {
-            await PullOverApiAsync(query.AppendTo("images/create"), progress, cancellationToken).ConfigureAwait(false);
+            await PullOverApiAsync(PullPath(reference, platform), progress, cancellationToken).ConfigureAwait(false);
             return;
         }
         catch (DockerException ex) when (!cancellationToken.IsCancellationRequested && IsAuthenticationFailure(ex))
@@ -157,8 +190,30 @@ public sealed class ImageOperations
                 $"Anonymous pull of '{reference}' was refused; retrying through the docker command line.");
         }
 
-        await PullOverCliAsync(reference, progress, cancellationToken).ConfigureAwait(false);
+        await _cli.RunAsync(PullCliArguments(reference, platform), workingDir: null, progress, cancellationToken)
+            .ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// The request path of <c>POST /images/create</c> for a pull of <paramref name="reference"/>, with
+    /// the <c>platform</c> query parameter when <paramref name="platform"/> is set.
+    /// </summary>
+    internal static string PullPath(string reference, string platform)
+    {
+        var (name, tag) = SplitReference(reference);
+        var query = new QueryStringBuilder()
+            .Add("fromImage", name)
+            .Add("tag", tag)
+            .Add("platform", platform);
+        return query.AppendTo("images/create");
+    }
+
+    /// <summary>
+    /// The <c>docker pull</c> argument list of the credentialled fallback, with <c>--platform</c> when
+    /// <paramref name="platform"/> is set.
+    /// </summary>
+    internal static IReadOnlyList<string> PullCliArguments(string reference, string platform) =>
+        platform is null ? ["pull", reference] : ["pull", "--platform", platform, reference];
 
     /// <summary>
     /// Removes an image, or one of its tags when other tags remain.
@@ -252,7 +307,10 @@ public sealed class ImageOperations
     /// The build shells out to <c>docker build</c> so that BuildKit is used; the Engine API's build
     /// endpoint drives the legacy builder only. No timeout is applied.
     /// </remarks>
-    /// <exception cref="ArgumentException"><paramref name="spec"/> is missing a context or a tag.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="spec"/> is missing a context or a tag, or its <see cref="ImageBuildSpec.Platform"/>
+    /// names more than one platform.
+    /// </exception>
     /// <exception cref="DirectoryNotFoundException">The context directory does not exist.</exception>
     /// <exception cref="FileNotFoundException">The Dockerfile does not exist.</exception>
     /// <exception cref="DockerCliException">The build failed.</exception>
@@ -286,6 +344,33 @@ public sealed class ImageOperations
             throw new FileNotFoundException($"The Dockerfile '{dockerfile}' does not exist.", dockerfile);
         }
 
+        var args = BuildArguments(spec, context, dockerfile);
+
+        var log = new BuildLog(spec.Output);
+        await _cli.RunAsync(args, context, log, cancellationToken).ConfigureAwait(false);
+
+        var output = log.ToString();
+        var tags = spec.Tags.ToArray();
+
+        return new ImageBuildResult
+        {
+            ImageId = await ResolveBuiltImageIdAsync(tags[0], output, cancellationToken).ConfigureAwait(false),
+            Tags = tags,
+            Output = output,
+        };
+    }
+
+    /// <summary>
+    /// The <c>docker build</c> argument list for <paramref name="spec"/>, with the context and Dockerfile
+    /// already resolved to full paths. <c>--platform</c> is added when <see cref="ImageBuildSpec.Platform"/>
+    /// is set.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// A tag is blank, or <see cref="ImageBuildSpec.Platform"/> names more than one platform.
+    /// </exception>
+    internal static IReadOnlyList<string> BuildArguments(ImageBuildSpec spec, string context, string dockerfile)
+    {
+        var platform = PlatformArgument.Normalize(spec.Platform, "ImageBuildSpec.Platform", nameof(spec));
         var args = new List<string> { "build", "-f", dockerfile };
 
         foreach (var tag in spec.Tags)
@@ -327,20 +412,14 @@ public sealed class ImageOperations
             args.Add("--no-cache");
         }
 
-        args.Add(context);
-
-        var log = new BuildLog(spec.Output);
-        await _cli.RunAsync(args, context, log, cancellationToken).ConfigureAwait(false);
-
-        var output = log.ToString();
-        var tags = spec.Tags.ToArray();
-
-        return new ImageBuildResult
+        if (platform is not null)
         {
-            ImageId = await ResolveBuiltImageIdAsync(tags[0], output, cancellationToken).ConfigureAwait(false),
-            Tags = tags,
-            Output = output,
-        };
+            args.Add("--platform");
+            args.Add(platform);
+        }
+
+        args.Add(context);
+        return args;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -568,11 +647,6 @@ public sealed class ImageOperations
             }
         }
     }
-
-    private async Task PullOverCliAsync(string reference, IProgress<string> progress,
-        CancellationToken cancellationToken) =>
-        await _cli.RunAsync(["pull", reference], workingDir: null, progress, cancellationToken)
-            .ConfigureAwait(false);
 
     private async Task<string> ResolveBuiltImageIdAsync(string tag, string output,
         CancellationToken cancellationToken)

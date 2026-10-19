@@ -70,7 +70,14 @@ public sealed partial class ContainerOperations
     /// <param name="spec">The container specification.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The new container's id.</returns>
-    /// <exception cref="DockerImageNotFoundException">The image is not available locally.</exception>
+    /// <exception cref="DockerImageNotFoundException">
+    /// The image is not available locally, or (with <see cref="ContainerSpec.Platform"/> set) its variant
+    /// for that platform is not.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// <see cref="ContainerSpec.Image"/> is blank, or <see cref="ContainerSpec.Platform"/> names more than
+    /// one platform.
+    /// </exception>
     public async Task<string> CreateAsync(ContainerSpec spec, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(spec);
@@ -79,11 +86,11 @@ public sealed partial class ContainerOperations
             throw new ArgumentException("ContainerSpec.Image is required.", nameof(spec));
         }
 
-        var query = new QueryStringBuilder().Add("name", spec.Name);
+        var path = CreatePath(spec);
         var request = BuildCreateRequest(spec);
 
         var response = await _api
-            .PostAsync<ContainerCreateResponse>(query.AppendTo("containers/create"), request, cancellationToken)
+            .PostAsync<ContainerCreateResponse>(path, request, cancellationToken)
             .ConfigureAwait(false);
 
         return response.Id
@@ -568,6 +575,21 @@ public sealed partial class ContainerOperations
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(idOrName);
         return Uri.EscapeDataString(idOrName.TrimStart('/'));
+    }
+
+    /// <summary>
+    /// The request path of <c>POST /containers/create</c> for <paramref name="spec"/>: the
+    /// <c>name</c> query parameter when <see cref="ContainerSpec.Name"/> is set, and the
+    /// <c>platform</c> query parameter (Engine API 1.41 and later) when <see cref="ContainerSpec.Platform"/>
+    /// is set.
+    /// </summary>
+    internal static string CreatePath(ContainerSpec spec)
+    {
+        var platform = PlatformArgument.Normalize(spec.Platform, "ContainerSpec.Platform", nameof(spec));
+        var query = new QueryStringBuilder()
+            .Add("name", spec.Name)
+            .Add("platform", platform);
+        return query.AppendTo("containers/create");
     }
 
     private static ContainerCreateRequest BuildCreateRequest(ContainerSpec spec)

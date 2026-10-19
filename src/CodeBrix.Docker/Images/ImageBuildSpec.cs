@@ -54,6 +54,20 @@ public sealed class ImageBuildSpec
     /// <summary>Gets or sets a value indicating whether to ignore the build cache.</summary>
     public bool NoCache { get; set; }
 
+    /// <summary>
+    /// Gets or sets the target platform, in <c>os/arch[/variant]</c> form, for example
+    /// <c>linux/arm64</c> or <c>linux/riscv64</c>, passed as <c>--platform</c>. <see langword="null"/> or
+    /// blank, the default, builds for the engine's own platform.
+    /// </summary>
+    /// <remarks>
+    /// ONE value only: the build loads a single-platform image into the engine's local image store, and
+    /// a comma-separated list is rejected with <see cref="ArgumentException"/>. A multi-platform build
+    /// needs a registry push, which this library does not do. Building for a foreign architecture runs
+    /// the Dockerfile's <c>RUN</c> steps under emulation, so on Linux the host needs a qemu-user binfmt
+    /// handler for that architecture (for example <c>/proc/sys/fs/binfmt_misc/qemu-aarch64</c>).
+    /// </remarks>
+    public string Platform { get; set; }
+
     /// <summary>Gets or sets the labels to apply to the built image.</summary>
     public IDictionary<string, string> Labels { get; set; } =
         new Dictionary<string, string>(StringComparer.Ordinal);

@@ -112,7 +112,7 @@ KEY NAMESPACES / USINGS
     using CodeBrix.Docker;   // EVERY public type in the package
 
 That is the whole story. The library declares exactly ONE namespace,
-CodeBrix.Docker, and every one of its ninety-six public types lives in it. The
+CodeBrix.Docker, and every one of its public types lives in it. The
 folders you see in the repository (Containers/, Archive/, Images/,
 Diagnostics/, Advisor/, Analysis/, Transport/, Client/, Common/, Cli/,
 Networks/, Volumes/, System/) are FILE ORGANIZATION ONLY. They are not namespaces.
@@ -587,7 +587,18 @@ and `Mounts = { MountSpec.Volume(...) }` collection-initializer syntax works.
         public string                      LogDriver    { get; set; }
         public IDictionary<string, string> LogOptions   { get; set; } = ...;
         public ResourceLimits              Limits       { get; set; }
+        public string                      Platform     { get; set; }   // "linux/arm64"; null = engine's own
     }
+
+Platform picks which variant of a multi-platform image the container runs, sent
+as the platform query parameter of POST /containers/create. One value only (a
+comma-separated list throws ArgumentException); null or blank leaves the daemon
+to choose its own platform. The variant must already be local -- pull it with
+ImagePullOptions.Platform first -- or CreateAsync throws
+DockerImageNotFoundException. ContainerInspectResult.Platform reports what the
+daemon recorded, which is the operating system ("linux"), not the architecture.
+RunAsync goes through CreateAsync, so the same applies to it. See FOREIGN
+PLATFORMS below.
 
 NetworkName attaches the container to a user-defined network at creation time.
 NetworkMode is the daemon-level HostConfig.NetworkMode, for the built-in "host"
@@ -744,6 +755,7 @@ CONTAINER RESULTS: SUMMARY, INSPECT AND STATE
         public string                 Name            { get; init; }   // "/name"
         public DateTimeOffset?        Created         { get; init; }
         public string                 Image           { get; init; }
+        public string                 Platform        { get; init; }   // "linux"
         public string                 LogPath         { get; init; }
         public long                   RestartCount    { get; init; }
         public ContainerState         State           { get; init; }
@@ -1290,6 +1302,10 @@ IMAGES: ImageOperations
     Task PullAsync(string reference, IProgress<string> progress = null,
                    CancellationToken cancellationToken = default);
 
+    Task PullAsync(string reference, ImagePullOptions options,
+                   IProgress<string> progress,
+                   CancellationToken cancellationToken = default);
+
     Task RemoveAsync(string reference, bool force = false,
                      CancellationToken cancellationToken = default);
 
@@ -1315,6 +1331,21 @@ reasons, it automatically retries through `docker pull`, which picks up the
 credential helpers configured on the machine -- and reports that it is doing so
 through the same IProgress<string>. An {"error": ...} line inside an otherwise
 successful response is raised as a DockerException.
+
+    public sealed class ImagePullOptions
+    {
+        public string Platform { get; set; }   // "linux/arm64"; null = engine's own
+    }
+
+The options overload pulls exactly as the first one does; Platform is sent as
+the platform query parameter of POST /images/create, and as --platform when the
+pull falls back to `docker pull`. One value only (a list throws
+ArgumentException). Its progress parameter has no default on purpose, so that
+the two-argument call PullAsync(reference, null) keeps meaning the first
+overload: pass progress: null when you have none. On the containerd image
+store a pull for another platform adds that variant's content to the same
+local image (one tag, many variants); on the older graph-driver store the tag
+names one platform's image, so the pull re-points the tag.
 
 BuildAsync shells out to `docker build` because BuildKit lives in the CLI; the
 Engine API's own build endpoint is the legacy builder. Both streams are captured
@@ -1381,7 +1412,33 @@ cancellation kills the CLI and propagates. A safe probe that prunes nothing:
         public bool                        NoCache          { get; set; }
         public IDictionary<string, string> Labels           { get; set; } = ...;
         public IProgress<string>           Output           { get; set; }  // live build log
+        public string                      Platform         { get; set; }  // --platform, ONE value
     }
+
+ImageBuildSpec.Platform is passed to `docker build` as --platform. ONE value
+only: the build loads a single-platform image into the engine's local image
+store, and a comma-separated list throws ArgumentException -- a multi-platform
+image needs a registry push, which this library does not do. Null or blank
+builds for the engine's own platform.
+
+FOREIGN PLATFORMS -- building, pulling and running another architecture
+
+PREREQUISITE: the engine's host must be able to execute the foreign
+architecture. On an x86-64 Linux host that means a qemu-user binfmt handler
+registered for it, visible as /proc/sys/fs/binfmt_misc/qemu-aarch64 (arm64) or
+/proc/sys/fs/binfmt_misc/qemu-riscv64 (riscv64). Without one, the RUN steps of
+a foreign build and the processes of a foreign container cannot execute.
+
+    await client.Images.PullAsync("alpine:latest",
+        new ImagePullOptions { Platform = "linux/arm64" }, progress: null);
+    var id = await client.Containers.RunAsync(new ContainerSpec
+    {
+        Image = "alpine:latest", Platform = "linux/arm64", Command = ["uname", "-m"],
+    });                                    // logs: aarch64
+    await client.Images.BuildAsync(new ImageBuildSpec
+    {
+        ContextDirectory = context, Tags = { "my-app:arm64" }, Platform = "linux/arm64",
+    });                                    // InspectAsync(...).Architecture == "arm64"
 
     public sealed class ImageBuildResult
     {
@@ -2045,34 +2102,34 @@ On amd64 daemons nothing about this is observable; they get mintoolkit/mint:late
 as they always have.
 
 
-EVERY PUBLIC TYPE, BY AREA
---------------------------
-The package has exactly NINETY public types, all in the CodeBrix.Docker
-namespace, and all of them are listed here. There is no hidden surface, and
+PUBLIC TYPES, BY AREA
+---------------------
+Every public type lives in the CodeBrix.Docker namespace. The list below groups
+the main ones by area; the reference sections above describe each of them, and
 nothing in this list is off-limits.
 
-    ENTRY POINT (1)
+    ENTRY POINT
         DockerClient
 
-    OPERATIONS -- reached only through a DockerClient (8)
+    OPERATIONS -- reached only through a DockerClient
         ContainerOperations, ImageOperations, NetworkOperations,
         VolumeOperations, SystemOperations, DiagnosticsOperations,
         AdvisorEngine, AnalysisOperations
 
-    EXCEPTIONS (5)
+    EXCEPTIONS
         DockerException, DockerApiException, DockerContainerNotFoundException,
         DockerImageNotFoundException, DockerCliException
 
-    THINGS YOU CONSTRUCT -- specs, options and value types (12)
+    THINGS YOU CONSTRUCT -- specs, options and value types
         DockerClientOptions, ContainerSpec, ResourceLimits, MountSpec,
         PortBinding, RestartPolicy, HealthcheckSpec, LogConfig, ExecSpec,
-        ImageBuildSpec, TrivyScanOptions, SlimOptions
+        ImageBuildSpec, ImagePullOptions, TrivyScanOptions, SlimOptions
 
-    ENUMS (5)
+    ENUMS
         MountKind, RestartPolicyKind, ExecStreamTarget, ThrottleSeverity,
         AdvisorSeverity
 
-    THINGS YOU RECEIVE -- containers (19)
+    THINGS YOU RECEIVE -- containers
         ContainerSummary, ContainerInspectResult, ContainerState,
         ContainerConfig, ContainerHostConfig, HostRestartPolicy,
         ContainerNetworkSettings, ContainerEndpointSettings,
@@ -2080,28 +2137,28 @@ nothing in this list is off-limits.
         ContainerHealthLogEntry, ContainerLogs, ExecResult, ExecInspectResult,
         ExecStreamReadResult, ContainerExecStream, ContainerStats, PidsStats
 
-    THINGS YOU RECEIVE -- statistics (7)
+    THINGS YOU RECEIVE -- statistics
         CpuStats, CpuUsage, ThrottlingData, MemoryStats, BlkioStats,
         BlkioStatEntry, NetworkStats
 
-    THINGS YOU RECEIVE -- images (7)
+    THINGS YOU RECEIVE -- images
         ImageSummary, ImageInspectResult, ImageConfig, ImageRootFs,
         ImageHistoryEntry, ImageBuildResult, JsonEmptyObject
 
-    THINGS YOU RECEIVE -- networks and volumes (8)
+    THINGS YOU RECEIVE -- networks and volumes
         NetworkSummary, NetworkInspectResult, NetworkContainerAttachment,
         NetworkIpam, NetworkIpamConfig, VolumeSummary, VolumeInspectResult,
         VolumeUsageData
 
-    THINGS YOU RECEIVE -- daemon (5)
+    THINGS YOU RECEIVE -- daemon
         DockerVersionInfo, DockerSystemInfo, DiskUsageInfo, DockerEvent,
         DockerEventActor
 
-    THINGS YOU RECEIVE -- diagnostics and advisor (6)
+    THINGS YOU RECEIVE -- diagnostics and advisor
         CpuThrottlingReport, MemoryBreakdownReport, OomReport, HealthReport,
         ContainerDiagnosticsReport, AdvisorFinding
 
-    THINGS YOU RECEIVE -- analysis (7)
+    THINGS YOU RECEIVE -- analysis
         TrivyScanResult, TrivyVulnerability, DiveAnalysisResult, DiveLayerInfo,
         HadolintResult, HadolintFinding, SlimResult
 
@@ -3192,7 +3249,7 @@ COMMON PITFALLS TO AVOID
 
 1. DO NOT confuse the package id with the namespace.
    Package  : CodeBrix.Docker.MitLicenseForever
-   Namespace: CodeBrix.Docker  (one namespace, all ninety-six public types)
+   Namespace: CodeBrix.Docker  (one namespace, every public type)
 
 2. DO NOT write "using CodeBrix.Docker.Containers;" or
    "using CodeBrix.Docker.Diagnostics;" or "using CodeBrix.Docker.Analysis;".
@@ -3501,7 +3558,9 @@ converter (PidsStatsTests.cs), the analysis tool-image defaults
 (AnalysisOperationsTests.cs), and -- without a daemon -- the copy path-escape
 guard (ContainerArchiveExtractorTests.cs), the exclusion and mode rules
 (ContainerArchiveWriterTests.cs) and the CLI runner's one retried failure
-(DockerCliRunnerTests.cs), all in the same tests/CodeBrix.Docker.Tests folder.
+(DockerCliRunnerTests.cs), and the arm64 pull, run and build under qemu-user
+emulation (ForeignPlatformTests.cs), all in the same tests/CodeBrix.Docker.Tests
+folder.
 
 A full sample application built on this package -- a Redis topology manager with
 container management, live diagnostics and an interactive console into any
@@ -3515,7 +3574,7 @@ QUICK REFERENCE CARD
 ====================
 
 PACKAGE     CodeBrix.Docker.MitLicenseForever   (MIT; .NET 10+; zero dependencies)
-NAMESPACE   using CodeBrix.Docker;              (the only one; 96 public types)
+NAMESPACE   using CodeBrix.Docker;              (the only one; every public type)
 
 CLIENT      using var client = DockerClient.Create();
             DockerClient.Create(new DockerClientOptions { Endpoint = "...",
@@ -3549,7 +3608,7 @@ SPEC        new ContainerSpec { Image = "...",            // the only required m
               PortBindings, ExposedPorts, Mounts, NetworkName, NetworkMode,
               NetworkAliases,
               RestartPolicy, AutoRemove, Privileged, Healthcheck,
-              LogDriver, LogOptions, Limits }
+              LogDriver, LogOptions, Limits, Platform }      // Platform = "linux/arm64"
 MOUNTS      MountSpec.Volume(name, path, readOnly: false)
             MountSpec.Bind(hostPath, path, readOnly: false)
             MountSpec.Tmpfs(path, sizeBytes: null)
@@ -3603,12 +3662,15 @@ COPY        .CopyDirectoryToContainerAsync(id, hostDir, "/existing/dir",
 
 IMAGES      client.Images
             .PullAsync(reference, progress) / .RemoveAsync(ref, force)
+            .PullAsync(reference, new ImagePullOptions { Platform = "linux/arm64" }, progress)
             .TagAsync(source, target) / .InspectAsync(ref) -> ImageInspectResult
             .ListAsync(all, labelFilters) -> IReadOnlyList<ImageSummary>
             .GetHistoryAsync(ref) -> IReadOnlyList<ImageHistoryEntry>
             .PruneAsync(dangling: true, labelFilters)
             .BuildAsync(new ImageBuildSpec { ContextDirectory, DockerfilePath, Tags,
-                BuildArgs, Target, Pull, NoCache, Labels, Output }) -> ImageBuildResult
+                BuildArgs, Target, Pull, NoCache, Labels, Output, Platform })
+                -> ImageBuildResult                     // Platform: ONE value
+            foreign architecture needs a qemu-user binfmt handler on the host
             .PruneBuildCacheAsync(new BuildCachePruneOptions { All, KeepStorageBytes,
                 OlderThan }) -> BuildCachePruneResult   // ENGINE-WIDE, unlabelled
 

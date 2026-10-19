@@ -41,6 +41,7 @@ runs the operating system's own SSH client rather than referencing an SSH librar
 * Copying files and folders into and out of containers - streamed tar archives with exclusion globs, Unix modes, symlink handling, progress and a path-escape guard on extraction - with no `docker` executable needed
 * Log retrieval with the Docker stream framing already decoded, and live statistics as a single sample or a stream
 * Image pull with progress, build (BuildKit via the CLI), tag, inspect, history, list, remove and prune
+* Foreign platforms: `ImagePullOptions.Platform`, `ContainerSpec.Platform` and `ImageBuildSpec.Platform` (one value, for example `linux/arm64`) pull, run and build another architecture's image - the host needs emulation for it (on Linux, a qemu-user binfmt handler such as `/proc/sys/fs/binfmt_misc/qemu-aarch64`)
 * BuildKit build-cache pruning (`docker builder prune`), which removing or pruning images never reclaims - engine-wide, bounded by age and kept-storage options
 * Networks (including aliases), volumes, daemon information and disk usage, and the daemon's event stream
 * Local and remote daemons: `unix://`, `npipe://`, `tcp://`/`http://` and `ssh://` endpoints, with `DOCKER_HOST` honored

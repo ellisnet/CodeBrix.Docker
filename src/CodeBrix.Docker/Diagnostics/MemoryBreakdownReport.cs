@@ -30,7 +30,7 @@ public sealed class MemoryBreakdownReport
 
     /// <summary>
     /// Gets anonymous (application) memory in bytes, from the cgroup <c>anon</c> counter. This is the
-    /// part that cannot be reclaimed and therefore the part that triggers OOM kills.
+    /// part that cannot be reclaimed and therefore the part that leads to OOM kills.
     /// </summary>
     public long? AnonBytes { get; init; }
 

@@ -25,6 +25,14 @@ public sealed class ContainerInspectResult
     [JsonPropertyName("Image")]
     public string Image { get; init; }
 
+    /// <summary>
+    /// Gets the platform the daemon records for the container (the top-level <c>Platform</c> field of
+    /// inspect). Docker reports the operating system here, for example <c>linux</c>, not the
+    /// architecture; <see langword="null"/> when the daemon does not send it.
+    /// </summary>
+    [JsonPropertyName("Platform")]
+    public string Platform { get; init; }
+
     /// <summary>Gets the path to the container's log file on the host, for file-based log drivers.</summary>
     [JsonPropertyName("LogPath")]
     public string LogPath { get; init; }

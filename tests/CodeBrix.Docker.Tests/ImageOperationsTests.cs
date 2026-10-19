@@ -345,6 +345,134 @@ public sealed class ImageOperationsTests
     }
 
     // ---------------------------------------------------------------------------------------
+    // Platform: request shaping for pull and build
+    // ---------------------------------------------------------------------------------------
+
+    [Fact]
+    public void PullPath_WithoutAPlatform_SendsNoPlatformParameter()
+    {
+        //Act
+        var path = ImageOperations.PullPath("alpine:latest", platform: null);
+
+        //Assert
+        path.Should().Be("images/create?fromImage=alpine&tag=latest");
+    }
+
+    [Fact]
+    public void PullPath_WithAPlatform_SendsThePlatformParameter()
+    {
+        //Act
+        var path = ImageOperations.PullPath("ghcr.io/owner/image:1.2", "linux/arm64");
+
+        //Assert
+        path.Should().Be("images/create?fromImage=ghcr.io%2Fowner%2Fimage&tag=1.2&platform=linux%2Farm64");
+    }
+
+    [Fact]
+    public void PullCliArguments_WithoutAPlatform_IsAPlainPull()
+    {
+        //Act
+        var args = ImageOperations.PullCliArguments("alpine:latest", platform: null);
+
+        //Assert
+        args.Should().Equal("pull", "alpine:latest");
+    }
+
+    [Fact]
+    public void PullCliArguments_WithAPlatform_PassesThePlatformFlag()
+    {
+        //Act
+        var args = ImageOperations.PullCliArguments("alpine:latest", "linux/riscv64");
+
+        //Assert
+        args.Should().Equal("pull", "--platform", "linux/riscv64", "alpine:latest");
+    }
+
+    [Fact]
+    public async Task PullAsync_WithAPlatformList_ThrowsBeforeAnyRequest()
+    {
+        //Arrange
+        var cli = new FakeCli(new CliResult(0, string.Empty, string.Empty));
+        var images = cli.CreateImages();
+        var options = new ImagePullOptions { Platform = "linux/amd64,linux/arm64" };
+
+        //Act
+        Func<Task> pull = () => images.PullAsync("alpine:latest", options, progress: null,
+            TestContext.Current.CancellationToken);
+
+        //Assert
+        var thrown = await pull.Should().ThrowAsync<ArgumentException>();
+        thrown.Which.Message.Should().Contain("ImagePullOptions.Platform");
+        cli.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void BuildArguments_WithoutAPlatform_HasNoPlatformFlag()
+    {
+        //Arrange
+        var spec = new ImageBuildSpec { ContextDirectory = "/ctx", Tags = { "codebrix-test/x:1" } };
+
+        //Act
+        var args = ImageOperations.BuildArguments(spec, "/ctx", "/ctx/Dockerfile");
+
+        //Assert
+        args.Should().Equal("build", "-f", "/ctx/Dockerfile", "-t", "codebrix-test/x:1", "/ctx");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void BuildArguments_WithABlankPlatform_HasNoPlatformFlag(string platform)
+    {
+        //Arrange
+        var spec = new ImageBuildSpec { ContextDirectory = "/ctx", Tags = { "codebrix-test/x:1" }, Platform = platform };
+
+        //Act
+        var args = ImageOperations.BuildArguments(spec, "/ctx", "/ctx/Dockerfile");
+
+        //Assert
+        args.Should().NotContain("--platform");
+    }
+
+    [Fact]
+    public void BuildArguments_WithAPlatform_PassesItJustBeforeTheContext()
+    {
+        //Arrange
+        var spec = new ImageBuildSpec
+        {
+            ContextDirectory = "/ctx",
+            Tags = { "codebrix-test/x:1" },
+            NoCache = true,
+            Platform = " linux/arm64 ",
+        };
+
+        //Act
+        var args = ImageOperations.BuildArguments(spec, "/ctx", "/ctx/Dockerfile");
+
+        //Assert
+        args.Should().Equal("build", "-f", "/ctx/Dockerfile", "-t", "codebrix-test/x:1", "--no-cache",
+            "--platform", "linux/arm64", "/ctx");
+    }
+
+    [Fact]
+    public void BuildArguments_WithAPlatformList_Throws()
+    {
+        //Arrange
+        var spec = new ImageBuildSpec
+        {
+            ContextDirectory = "/ctx",
+            Tags = { "codebrix-test/x:1" },
+            Platform = "linux/amd64,linux/arm64",
+        };
+
+        //Act
+        Action build = () => ImageOperations.BuildArguments(spec, "/ctx", "/ctx/Dockerfile");
+
+        //Assert
+        build.Should().Throw<ArgumentException>().WithMessage("*ImageBuildSpec.Platform*");
+    }
+
+    // ---------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------
 

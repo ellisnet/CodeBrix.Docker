@@ -102,4 +102,20 @@ public sealed class ContainerSpec
 
     /// <summary>Gets or sets the cgroup resource limits.</summary>
     public ResourceLimits Limits { get; set; }
+
+    /// <summary>
+    /// Gets or sets the platform of the image variant to run, in <c>os/arch[/variant]</c> form, for
+    /// example <c>linux/arm64</c> or <c>linux/riscv64</c>. It is sent as the <c>platform</c> query
+    /// parameter of <c>POST /containers/create</c>. <see langword="null"/> or blank, the default, lets
+    /// the daemon pick the variant for its own platform, so existing callers are unaffected. One value
+    /// only; a comma-separated list is rejected.
+    /// </summary>
+    /// <remarks>
+    /// The variant must already be present locally - pull it first with
+    /// <see cref="ImagePullOptions.Platform"/>; a missing variant is a
+    /// <see cref="DockerImageNotFoundException"/>. A foreign architecture runs under emulation, so on
+    /// Linux the host needs a qemu-user binfmt handler for it (for example
+    /// <c>/proc/sys/fs/binfmt_misc/qemu-aarch64</c>).
+    /// </remarks>
+    public string Platform { get; set; }
 }

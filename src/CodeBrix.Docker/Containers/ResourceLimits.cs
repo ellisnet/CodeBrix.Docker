@@ -28,7 +28,7 @@ public sealed class ResourceLimits
     /// </summary>
     public long? CpuShares { get; set; }
 
-    /// <summary>Gets or sets the hard memory limit in bytes. Exceeding it triggers the kernel OOM killer.</summary>
+    /// <summary>Gets or sets the hard memory limit in bytes. Exceeding it makes the kernel OOM killer act.</summary>
     public long? MemoryBytes { get; set; }
 
     /// <summary>
